@@ -9,7 +9,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -136,7 +138,10 @@ fun TerminalScreen() {
                 Text("^C", color = FG, style = style, modifier = Modifier.padding(8.dp).clickableNoRipple { TerminalHub.interrupt() })
                 BasicTextField(
                     value = input, onValueChange = { input = it },
-                    modifier = Modifier.weight(1f).padding(vertical = 8.dp),
+                    modifier = Modifier.weight(1f)
+                        .padding(vertical = 4.dp)
+                        .border(1.dp, ACCENT, RoundedCornerShape(6.dp))
+                        .padding(horizontal = 10.dp, vertical = 10.dp),
                     singleLine = true,
                     textStyle = style.copy(color = Color.White),
                     cursorBrush = SolidColor(ACCENT),
