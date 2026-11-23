@@ -14,7 +14,7 @@ def _publish(path):
     return str(jclass("iecxiv.yewtube.DownloadPublisher").publish(app, path))
 
 
-def download_video(ytid, folder, hook):
+def download_video(ytid, folder, hook, work_dir=None):
     import yt_dlp
     from java import jclass
     from yt_dlp.utils import sanitize_filename
@@ -22,10 +22,12 @@ def download_video(ytid, folder, hook):
     folder = os.path.abspath(folder)
     os.makedirs(folder, exist_ok=True)
     muxer = jclass("iecxiv.yewtube.Mp4Muxer")
-    work = tempfile.mkdtemp(prefix=".yewtube-video-", dir=folder)
+    work = os.path.abspath(work_dir) if work_dir else tempfile.mkdtemp(prefix=".yewtube-video-", dir=folder)
+    os.makedirs(work, exist_ok=True)
     url = "https://www.youtube.com/watch?v=%s" % ytid
     try:
         def fetch(label, selector):
+            hook({"status": "extracting"})
             print("\n[descarga] %s" % label)
             opts = {
                 "outtmpl": os.path.join(work, label + ".%(ext)s"),
@@ -62,6 +64,7 @@ def download_video(ytid, folder, hook):
         if not os.path.isfile(output) or os.path.getsize(output) == 0:
             raise RuntimeError("El multiplexador no genero un MP4 valido")
         print("[descarga] Exportando a Descargas publicas...")
+        hook({"status": "exporting"})
         destination = _publish(output)
         # On Android 8/9 the local output is the final file: do not delete it.
         if destination == os.path.abspath(output):

@@ -58,6 +58,7 @@ chaquopy {
 }
 
 dependencies {
+    implementation("androidx.work:work-runtime:2.10.4")
     val media3 = "1.5.1"
     implementation("androidx.media3:media3-exoplayer:$media3")
     implementation("androidx.media3:media3-session:$media3")

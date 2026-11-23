@@ -1,4 +1,4 @@
-"""Android command adapters: one download backend and native clipboard."""
+"""Android command adapters: persistent downloads and native clipboard."""
 import types
 
 
@@ -14,32 +14,25 @@ def install(pafy):
         g.message = message
 
     def run_items(dltype, songs):
-        saved, failed = [], []
-        interrupted = False
-        total = len(songs)
-        for position, song in enumerate(songs, 1):
-            print("\n[cola %d/%d] %s" % (position, total, song.title))
-            try:
-                result = pafy.download_video(song.ytid, config.DDIR.get, audio_only=dltype.startswith("da"))
-                if not result:
-                    raise RuntimeError("La descarga no confirmo que el archivo se guardara")
-                destination = result if isinstance(result, str) else "carpeta local: %s" % config.DDIR.get
-                saved.append("%s -> %s" % (song.title, destination))
-            except KeyboardInterrupt:
-                interrupted = True
-                break
-            except Exception as error:
-                failed.append("%s: %s" % (song.title, error))
-        remaining = total - len(saved) - len(failed)
-        message = "Guardados %d/%d; fallos %d; pendientes %d." % (len(saved), total, len(failed), remaining)
-        if interrupted:
-            message += " Cola interrumpida."
-        if saved:
-            message += "\n" + "\n".join(saved)
-        if failed:
-            message += "\nErrores:\n" + "\n".join(failed)
-        finish(message)
-        return not failed and not interrupted
+        import json
+        from java import jclass
+        from android_download_queue import enqueue
+        app = jclass("com.chaquo.python.Python").getPlatform().getApplication()
+        payload = [{"ytid": song.ytid, "title": str(song.title),
+                    "folder": str(config.DDIR.get), "audio": dltype.startswith("da")}
+                   for song in songs]
+        if not payload:
+            finish("No hay elementos para encolar.")
+            return False
+        try:
+            batch = enqueue(str(app.getFilesDir().getAbsolutePath()), json.dumps(payload))
+            jclass("iecxiv.yewtube.DownloadQueue").schedule(app)
+        except Exception as error:
+            finish("No se pudo iniciar la cola: %s. Consulta downloads status y usa downloads resume." % error)
+            return False
+        finish("Encoladas %d descargas (lote %s); todavia no son archivos guardados. "
+               "Usa downloads status, cancel, resume o retry." % (len(payload), batch[:8]))
+        return True
 
     original_single = downloads.download
     original_many = downloads.down_many
@@ -71,7 +64,6 @@ def install(pafy):
         if not numbers or any(number < 1 or number > len(g.model) for number in numbers):
             finish("Seleccion de descarga fuera de rango; no se descargo ningun elemento.")
             return False
-        # All files use the public destination returned by the Android backend.
         return run_items(dltype, [g.model[number - 1] for number in numbers])
 
     def copy(text):
@@ -92,4 +84,6 @@ def install(pafy):
     install_playback()
     from android_streams import install as install_streams
     install_streams()
+    from android_download_queue import install_commands as install_queue_commands
+    install_queue_commands()
     downloads._android_commands_installed = True
