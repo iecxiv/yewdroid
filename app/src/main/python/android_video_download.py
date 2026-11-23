@@ -80,36 +80,12 @@ def download_video(ytid, folder, hook):
 
 
 def _download_audio(original, ytid, folder):
-    from java import jclass
-    if jclass("android.os.Build$VERSION").SDK_INT < 29:
-        print("Aviso: Android 8/9 conserva el destino anterior del audio.")
-        return original(ytid, folder, audio_only=True)
-    os.makedirs(folder, exist_ok=True)
-    work = tempfile.mkdtemp(prefix=".yewtube-audio-", dir=folder)
-    try:
-        result = original(ytid, work, audio_only=True)
-        if not result:
-            raise RuntimeError("La descarga de audio no termino correctamente")
-        files = [os.path.join(work, name) for name in os.listdir(work)
-                 if os.path.isfile(os.path.join(work, name))]
-        if len(files) != 1 or files[0].endswith((".part", ".ytdl", ".tmp")):
-            raise RuntimeError("No se pudo identificar un unico archivo de audio terminado")
-        print("[descarga] Exportando a Descargas publicas...")
-        destination = _publish(files[0])
-    except BaseException as exc:
-        message = "Descarga/exportacion de audio interrumpida. Archivos conservados en: %s" % work
-        print(message)
-        if isinstance(exc, Exception):
-            raise RuntimeError("%s\n%s" % (exc, message)) from exc
-        raise
-    else:
-        shutil.rmtree(work, ignore_errors=True)
-        print("\nGuardado: %s" % destination)
-        return destination
+    from android_audio_download import download_audio
+    return download_audio(ytid, folder, _publish)
 
 
 def install(pafy):
-    """Keep format selection; return destinations and adapt Android commands."""
+    """Use strict audio selection; return destinations and adapt commands."""
     if getattr(pafy.download_video, "_android_video_mux", False):
         return
     original = pafy.download_video
