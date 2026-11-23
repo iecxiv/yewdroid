@@ -86,4 +86,6 @@ def install(pafy):
                      for entry in g.commands]
     downloads.download = single
     downloads.down_many = many
+    from android_links import install as install_links
+    install_links()
     downloads._android_commands_installed = True
