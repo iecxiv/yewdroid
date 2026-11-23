@@ -25,8 +25,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
@@ -41,7 +43,7 @@ import androidx.compose.ui.unit.sp
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
-import androidx.compose.runtime.saveable.rememberSaveable
+import kotlinx.coroutines.delay
 
 private val BG = Color(0xFF0C0C0C)
 private val FG = Color(0xFFDCDFE4)
@@ -66,64 +68,88 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun TerminalScreen() {
     val ctx = LocalContext.current
+    val zoomFlow = remember(ctx.applicationContext) { TerminalPreferences.zoom(ctx.applicationContext) }
+    val savedZoom by zoomFlow.collectAsState(initial = null)
+    var selectedZoom by remember { mutableStateOf<Float?>(null) }
+    val currentZoom = selectedZoom ?: savedZoom
+    val uiStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = FG)
+    val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= 33) permLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+    if (currentZoom == null) {
+        Box(Modifier.fillMaxSize().background(BG).systemBarsPadding(), contentAlignment = Alignment.Center) {
+            Text("Cargando terminal...", style = uiStyle)
+        }
+        return
+    }
+    val fontSp = currentZoom
     val lines by TerminalHub.lines.collectAsState()
     val playing by TerminalHub.playing.collectAsState()
     val audioOn by TerminalHub.audioOn.collectAsState()
     val now by TerminalHub.nowPlaying.collectAsState()
-
-    var fontSp by rememberSaveable { mutableFloatStateOf(11f) }
-    var input by remember { mutableStateOf("") }
+    var input by rememberSaveable { mutableStateOf("") }
     val history = remember { mutableStateListOf<String>() }
     var hIdx by remember { mutableIntStateOf(-1) }
     val listState = rememberLazyListState()
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer()
-
     val style = TextStyle(
         fontFamily = FontFamily.Monospace, fontSize = fontSp.sp,
         lineHeight = (fontSp * 1.3f).sp, color = FG
     )
-    val charW = remember(fontSp) { measurer.measure("M".repeat(20), style).size.width / 20f }
+    val charW = remember(measurer, style, density.density, density.fontScale) {
+        (measurer.measure("M".repeat(64), style).size.width / 64f).coerceAtLeast(1f)
+    }
 
-    val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
-    LaunchedEffect(Unit) {
-        if (Build.VERSION.SDK_INT >= 33) permLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+    fun changeZoom(delta: Float) {
+        val value = (fontSp + delta).coerceIn(7f, 20f)
+        selectedZoom = value
+        TerminalPreferences.save(ctx, value)
     }
 
     fun submit() {
-        val l = input
-        TerminalHub.sendLine(l)
-        if (l.isNotBlank()) history.add(l)
-        input = ""; hIdx = -1
+        val line = input
+        TerminalHub.sendLine(line)
+        if (line.isNotBlank()) history.add(line)
+        input = ""
+        hIdx = -1
     }
 
     Column(Modifier.fillMaxSize().background(BG).systemBarsPadding().imePadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("yewtube", color = ACCENT, style = style, modifier = Modifier.weight(1f))
-            Text("A-", color = FG, style = style, modifier = Modifier.padding(8.dp).let {
-                it.then(Modifier.clickableNoRipple { fontSp = (fontSp - 1f).coerceAtLeast(7f) })
-            })
-            Text("A+", color = FG, style = style, modifier = Modifier.padding(8.dp).let {
-                it.then(Modifier.clickableNoRipple { fontSp = (fontSp + 1f).coerceAtMost(20f) })
-            })
+            Text("yewtube", color = ACCENT, style = uiStyle, modifier = Modifier.weight(1f))
+            Text("A-", color = FG, style = uiStyle, modifier = Modifier
+                .clickableNoRipple { changeZoom(-1f) }.padding(12.dp))
+            Text("A+", color = FG, style = uiStyle, modifier = Modifier
+                .clickableNoRipple { changeZoom(1f) }.padding(12.dp))
         }
 
-        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 4.dp)) {
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 4.dp).clipToBounds()) {
             val wPx = with(density) { maxWidth.toPx() }
             val hPx = with(density) { maxHeight.toPx() }
-            val lineH = with(density) { style.lineHeight.toPx() }
-            val cols = (wPx / charW).toInt().coerceAtLeast(20)
-            val rows = (hPx / lineH).toInt().coerceAtLeast(6)
-            LaunchedEffect(cols, rows) { TerminalHub.ensureStarted(ctx.applicationContext, cols, rows) }
-            LaunchedEffect(lines) { if (lines.isNotEmpty()) listState.scrollToItem(lines.lastIndex) }
-            LazyColumn(state = listState) {
-                items(lines.size) { i -> Text(lines[i], style = style, maxLines = 1, softWrap = false) }
+            val lineH = with(density) { style.lineHeight.toPx() }.coerceAtLeast(1f)
+            val cols = (wPx / charW).toInt().coerceAtLeast(1)
+            val rows = (hPx / lineH).toInt().coerceAtLeast(1)
+            LaunchedEffect(cols, rows, wPx > 0f && hPx > 0f) {
+                if (wPx > 0f && hPx > 0f) {
+                    delay(100)
+                    TerminalHub.ensureStarted(ctx.applicationContext, cols, rows)
+                }
+            }
+            LaunchedEffect(lines, cols, rows) {
+                if (lines.isNotEmpty()) listState.scrollToItem(lines.lastIndex)
+            }
+            LazyColumn(modifier = Modifier.fillMaxSize(), state = listState) {
+                items(lines.size) { i ->
+                    Text(lines[i], modifier = Modifier.fillMaxWidth(), style = style, softWrap = true)
+                }
             }
         }
 
         if (playing) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-                Text(now, color = ACCENT, style = style, maxLines = 1)
+                Text(now, color = ACCENT, style = uiStyle, maxLines = 1)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                     CtrlBtn(Icons.Filled.SkipPrevious) { TerminalHub.control("prev") }
                     CtrlBtn(Icons.Filled.Replay10) { TerminalHub.control("seekb") }
@@ -135,15 +161,14 @@ fun TerminalScreen() {
             }
         } else {
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("^C", color = FG, style = style, modifier = Modifier.padding(8.dp).clickableNoRipple { TerminalHub.interrupt() })
+                Text("^C", color = FG, style = uiStyle, modifier = Modifier.padding(8.dp).clickableNoRipple { TerminalHub.interrupt() })
                 BasicTextField(
                     value = input, onValueChange = { input = it },
-                    modifier = Modifier.weight(1f)
-                        .padding(vertical = 4.dp)
+                    modifier = Modifier.weight(1f).padding(vertical = 4.dp)
                         .border(1.dp, ACCENT, RoundedCornerShape(6.dp))
                         .padding(horizontal = 10.dp, vertical = 10.dp),
                     singleLine = true,
-                    textStyle = style.copy(color = Color.White),
+                    textStyle = uiStyle.copy(color = Color.White),
                     cursorBrush = SolidColor(ACCENT),
                     keyboardOptions = KeyboardOptions(
                         capitalization = KeyboardCapitalization.None,
@@ -151,7 +176,10 @@ fun TerminalScreen() {
                     ),
                     keyboardActions = KeyboardActions(onSend = { submit() }),
                     decorationBox = { inner ->
-                        Row { Text("> ", color = ACCENT, style = style); inner() }
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text("> ", color = ACCENT, style = uiStyle)
+                            Box(Modifier.weight(1f)) { inner() }
+                        }
                     }
                 )
                 CtrlBtn(Icons.Filled.ArrowUpward) {
@@ -178,6 +206,4 @@ private fun CtrlBtn(icon: androidx.compose.ui.graphics.vector.ImageVector, onCli
 }
 
 private fun Modifier.clickableNoRipple(onClick: () -> Unit): Modifier =
-    this.then(Modifier.clickable(
-        interactionSource = null, indication = null, onClick = onClick
-    ))
+    this.then(Modifier.clickable(interactionSource = null, indication = null, onClick = onClick))

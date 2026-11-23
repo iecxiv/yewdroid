@@ -15,6 +15,7 @@ import com.chaquo.python.Python
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -44,8 +45,6 @@ object TerminalHub {
     private val buffer = TermBuffer()
     private val _lines = MutableStateFlow<List<AnnotatedString>>(emptyList())
     val lines: StateFlow<List<AnnotatedString>> = _lines
-
-    /** true mientras yewtube esta en modo reproduccion (equivale a mpv ocupando la terminal). */
     val playing = MutableStateFlow(false)
     val audioOn = MutableStateFlow(false)
     val nowPlaying = MutableStateFlow("")
@@ -53,6 +52,7 @@ object TerminalHub {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val main = Handler(Looper.getMainLooper())
     private val pending = AtomicBoolean(false)
+    private val sizes = Channel<Pair<Int, Int>>(Channel.CONFLATED)
     @Volatile private var py: PyObject? = null
     @Volatile private var exo: ExoPlayer? = null
     private var started = false
@@ -81,17 +81,22 @@ object TerminalHub {
 
     @Synchronized
     fun ensureStarted(ctx: Context, cols: Int, rows: Int) {
-        if (!started) {
-            started = true
-            val dir = ctx.filesDir.absolutePath
-            scope.launch {
-                val m = Python.getInstance().getModule("yt_term")
-                py = m
-                m.callAttr("start", sink, dir, cols, rows)
-                tick()
+        sizes.trySend(cols to rows)
+        if (started) return
+        started = true
+        val dir = ctx.filesDir.absolutePath
+        scope.launch {
+            val m = Python.getInstance().getModule("yt_term")
+            Python.getInstance().getModule("terminal_layout").callAttr("install", m)
+            py = m
+            val initial = sizes.tryReceive().getOrNull() ?: (cols to rows)
+            m.callAttr("start", sink, dir, initial.first, initial.second)
+            scope.launch { tick() }
+            for ((width, height) in sizes) {
+                runCatching { m.callAttr("resize", width, height) }.onFailure {
+                    onWrite("\n[terminal] No se pudo actualizar el tamano: ${it.message}\n")
+                }
             }
-        } else {
-            scope.launch { runCatching { py?.callAttr("resize", cols, rows) } }
         }
     }
 
