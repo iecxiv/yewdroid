@@ -1,4 +1,4 @@
-package com.example.ytlocal
+package iecxiv.yewtube
 
 import android.content.Context
 import android.net.Uri

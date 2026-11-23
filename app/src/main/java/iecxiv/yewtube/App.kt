@@ -1,4 +1,4 @@
-package com.example.ytlocal
+package iecxiv.yewtube
 
 import android.app.Application
 import com.chaquo.python.Python

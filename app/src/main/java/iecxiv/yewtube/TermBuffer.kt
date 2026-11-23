@@ -1,4 +1,4 @@
-package com.example.ytlocal
+package iecxiv.yewtube
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString

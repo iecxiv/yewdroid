@@ -1,4 +1,4 @@
-package com.example.ytlocal
+package iecxiv.yewtube
 
 import android.Manifest
 import android.content.ComponentName

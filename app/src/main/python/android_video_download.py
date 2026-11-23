@@ -11,7 +11,7 @@ def _publish(path):
         print("Aviso: Android 8/9 conserva el destino anterior; no se exporto a Descargas publicas.")
         return os.path.abspath(path)
     app = jclass("com.chaquo.python.Python").getPlatform().getApplication()
-    return str(jclass("com.example.ytlocal.DownloadPublisher").publish(app, path))
+    return str(jclass("iecxiv.yewtube.DownloadPublisher").publish(app, path))
 
 
 def download_video(ytid, folder, hook):
@@ -21,7 +21,7 @@ def download_video(ytid, folder, hook):
 
     folder = os.path.abspath(folder)
     os.makedirs(folder, exist_ok=True)
-    muxer = jclass("com.example.ytlocal.Mp4Muxer")
+    muxer = jclass("iecxiv.yewtube.Mp4Muxer")
     work = tempfile.mkdtemp(prefix=".yewtube-video-", dir=folder)
     url = "https://www.youtube.com/watch?v=%s" % ytid
     try:
