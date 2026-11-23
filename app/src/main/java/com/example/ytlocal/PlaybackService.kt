@@ -1,0 +1,59 @@
+package com.example.ytlocal
+
+import android.content.Intent
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
+import androidx.media3.common.ForwardingPlayer
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.MediaSession
+import androidx.media3.session.MediaSessionService
+
+/** Expone siguiente/anterior en notificacion y pantalla de bloqueo; los delega a yewtube. */
+class NavPlayer(p: Player) : ForwardingPlayer(p) {
+    override fun getAvailableCommands(): Player.Commands =
+        super.getAvailableCommands().buildUpon().addAll(
+            Player.COMMAND_SEEK_TO_NEXT, Player.COMMAND_SEEK_TO_PREVIOUS,
+            Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM, Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM
+        ).build()
+
+    override fun isCommandAvailable(command: Int): Boolean = availableCommands.contains(command)
+    override fun hasNextMediaItem(): Boolean = true
+    override fun hasPreviousMediaItem(): Boolean = true
+    override fun seekToNext() { TerminalHub.control("next") }
+    override fun seekToNextMediaItem() { TerminalHub.control("next") }
+    override fun seekToPrevious() { TerminalHub.control("prev") }
+    override fun seekToPreviousMediaItem() { TerminalHub.control("prev") }
+}
+
+class PlaybackService : MediaSessionService() {
+    private var session: MediaSession? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        val player = ExoPlayer.Builder(this)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                    .setUsage(C.USAGE_MEDIA).build(), true
+            )
+            .setHandleAudioBecomingNoisy(true)
+            .setWakeMode(C.WAKE_MODE_NETWORK)
+            .build()
+        TerminalHub.registerPlayer(player)
+        session = MediaSession.Builder(this, NavPlayer(player)).build()
+    }
+
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = session
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        if (!TerminalHub.playing.value) stopSelf()
+    }
+
+    override fun onDestroy() {
+        TerminalHub.unregisterPlayer()
+        session?.run { player.release(); release() }
+        session = null
+        super.onDestroy()
+    }
+}

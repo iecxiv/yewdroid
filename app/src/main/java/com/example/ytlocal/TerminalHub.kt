@@ -1,0 +1,164 @@
+package com.example.ytlocal
+
+import android.content.Context
+import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import androidx.compose.ui.text.AnnotatedString
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+import com.chaquo.python.PyObject
+import com.chaquo.python.Python
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicBoolean
+
+/** Interfaz que Python (yt_term.py) invoca. */
+interface TermSink {
+    fun write(s: String)
+    fun play(url: String, title: String, artist: String, thumb: String, lengthSec: Int)
+    fun mode(playing: Boolean)
+    fun stopPlayback()
+}
+
+/** Clase publica y con nombre para que Chaquopy pueda llamarla desde Python. */
+class HubSink : TermSink {
+    override fun write(s: String) { TerminalHub.onWrite(s) }
+    override fun play(url: String, title: String, artist: String, thumb: String, lengthSec: Int) {
+        TerminalHub.onPlay(url, title, artist, thumb)
+    }
+    override fun mode(playing: Boolean) { TerminalHub.playing.value = playing }
+    override fun stopPlayback() { TerminalHub.onStopPlayback() }
+}
+
+object TerminalHub {
+    private val buffer = TermBuffer()
+    private val _lines = MutableStateFlow<List<AnnotatedString>>(emptyList())
+    val lines: StateFlow<List<AnnotatedString>> = _lines
+
+    /** true mientras yewtube esta en modo reproduccion (equivale a mpv ocupando la terminal). */
+    val playing = MutableStateFlow(false)
+    val audioOn = MutableStateFlow(false)
+    val nowPlaying = MutableStateFlow("")
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val main = Handler(Looper.getMainLooper())
+    private val pending = AtomicBoolean(false)
+    @Volatile private var py: PyObject? = null
+    @Volatile private var exo: ExoPlayer? = null
+    private var started = false
+    private val sink = HubSink()
+
+    private val listener = object : Player.Listener {
+        override fun onPlaybackStateChanged(state: Int) {
+            if (state == Player.STATE_ENDED && playing.value) event("next")
+        }
+        override fun onIsPlayingChanged(isPlaying: Boolean) { audioOn.value = isPlaying }
+        override fun onPlayerError(error: PlaybackException) {
+            onWrite("\n\u001b[31m[player] ${error.errorCodeName}\u001b[0m\n")
+            if (playing.value) event("next")
+        }
+    }
+
+    fun registerPlayer(p: ExoPlayer) {
+        exo = p
+        p.addListener(listener)
+    }
+
+    fun unregisterPlayer() {
+        exo?.removeListener(listener)
+        exo = null
+    }
+
+    @Synchronized
+    fun ensureStarted(ctx: Context, cols: Int, rows: Int) {
+        if (!started) {
+            started = true
+            val dir = ctx.filesDir.absolutePath
+            scope.launch {
+                val m = Python.getInstance().getModule("yt_term")
+                py = m
+                m.callAttr("start", sink, dir, cols, rows)
+                tick()
+            }
+        } else {
+            scope.launch { runCatching { py?.callAttr("resize", cols, rows) } }
+        }
+    }
+
+    private suspend fun tick() {
+        while (true) {
+            delay(1000)
+            if (playing.value) {
+                val pos = withContext(Dispatchers.Main) { exo?.currentPosition ?: 0L } / 1000
+                runCatching { py?.callAttr("progress", pos.toInt()) }
+            }
+        }
+    }
+
+    fun onWrite(s: String) {
+        buffer.append(s)
+        if (pending.compareAndSet(false, true)) {
+            scope.launch {
+                delay(40)
+                pending.set(false)
+                _lines.value = buffer.snapshot()
+            }
+        }
+    }
+
+    fun onPlay(url: String, title: String, artist: String, thumb: String) {
+        nowPlaying.value = title
+        main.post {
+            val p = exo
+            if (p == null) {
+                onWrite("\n\u001b[31m[player] servicio de reproduccion no disponible\u001b[0m\n")
+                event("stop")
+            } else {
+                val meta = MediaMetadata.Builder().setTitle(title).setArtist(artist)
+                    .setArtworkUri(if (thumb.isNotBlank()) Uri.parse(thumb) else null).build()
+                p.setMediaItem(MediaItem.Builder().setUri(url).setMediaMetadata(meta).build())
+                p.prepare()
+                p.play()
+            }
+        }
+    }
+
+    fun onStopPlayback() {
+        playing.value = false
+        nowPlaying.value = ""
+        main.post { exo?.stop(); exo?.clearMediaItems() }
+    }
+
+    private fun event(action: String) {
+        scope.launch { runCatching { py?.callAttr("player_event", action) } }
+    }
+
+    fun sendLine(line: String) {
+        onWrite(line + "\n")
+        scope.launch { runCatching { py?.callAttr("send", line) } }
+    }
+
+    fun interrupt() {
+        if (playing.value) event("stop")
+        else scope.launch { runCatching { py?.callAttr("interrupt") } }
+    }
+
+    fun control(action: String) {
+        when (action) {
+            "toggle" -> main.post { exo?.let { it.playWhenReady = !it.playWhenReady } }
+            "seekf" -> main.post { exo?.let { it.seekTo(it.currentPosition + 10_000) } }
+            "seekb" -> main.post { exo?.let { it.seekTo((it.currentPosition - 10_000).coerceAtLeast(0)) } }
+            else -> event(action)
+        }
+    }
+}
