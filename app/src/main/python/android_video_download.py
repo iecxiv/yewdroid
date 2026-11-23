@@ -1,9 +1,17 @@
-"""Download separate AVC/AAC tracks and mux them using Android, without FFmpeg."""
+"""Download tracks, mux on Android, and publish completed files to Downloads."""
 import os
 import shutil
 import sys
 import tempfile
-import uuid
+
+
+def _publish(path):
+    from java import jclass
+    if jclass("android.os.Build$VERSION").SDK_INT < 29:
+        print("Aviso: Android 8/9 conserva el destino anterior; no se exporto a Descargas publicas.")
+        return os.path.abspath(path)
+    app = jclass("com.chaquo.python.Python").getPlatform().getApplication()
+    return str(jclass("com.example.ytlocal.DownloadPublisher").publish(app, path))
 
 
 def download_video(ytid, folder, hook):
@@ -29,6 +37,8 @@ def download_video(ytid, folder, hook):
                 "fixup": "never",
                 "hls_prefer_native": True,
                 "postprocessors": [],
+                "match_filter": lambda info, *, incomplete=False: (
+                    "No se admiten emisiones en directo" if info.get("is_live") else None),
             }
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=True)
@@ -40,41 +50,73 @@ def download_video(ytid, folder, hook):
             return info, path
 
         vi, video = fetch("video", "bv[ext=mp4][vcodec^=avc1]")
-        if vi.get("is_live"):
-            raise RuntimeError("Esta descarga no admite emisiones en directo")
         _, audio = fetch("audio", "ba[ext=m4a][acodec^=mp4a]")
         title = sanitize_filename(str(vi.get("title") or "video"), restricted=False)[:120]
         safe_id = sanitize_filename(str(ytid), restricted=True)[:32]
-        stem = "%s-%s" % (title, safe_id)
-        output = os.path.join(folder, stem + ".mp4")
-        if os.path.exists(output):
-            output = os.path.join(folder, stem + "-" + uuid.uuid4().hex[:12] + ".mp4")
+        output = os.path.join(work, "%s-%s.mp4" % (title, safe_id))
+        # Track filenames must remain distinct even for a pathological title/id.
+        if output in (video, audio):
+            output = os.path.join(work, "resultado.mp4")
         print("\n[descarga] Uniendo video y audio sin recodificar...")
         muxer.merge(video, audio, output)
         if not os.path.isfile(output) or os.path.getsize(output) == 0:
             raise RuntimeError("El multiplexador no genero un MP4 valido")
+        print("[descarga] Exportando a Descargas publicas...")
+        destination = _publish(output)
+        # On Android 8/9 the local output is the final file: do not delete it.
+        if destination == os.path.abspath(output):
+            print("\nGuardado local: %s" % destination)
+            return True
     except BaseException as exc:
-        message = "Descarga de video interrumpida. Temporales conservados en: %s" % work
+        message = "Descarga/exportacion de video interrumpida. Archivos conservados en: %s" % work
         print(message)
-        sys.stderr.write(message + "\n")
         if isinstance(exc, Exception):
             raise RuntimeError("%s\n%s" % (exc, message)) from exc
         raise
     else:
         shutil.rmtree(work, ignore_errors=True)
-        print("\nGuardado: %s" % output)
+        print("\nGuardado: %s" % destination)
         return True
 
 
+def _download_audio(original, ytid, folder):
+    from java import jclass
+    if jclass("android.os.Build$VERSION").SDK_INT < 29:
+        print("Aviso: Android 8/9 conserva el destino anterior del audio.")
+        return original(ytid, folder, audio_only=True)
+    os.makedirs(folder, exist_ok=True)
+    work = tempfile.mkdtemp(prefix=".yewtube-audio-", dir=folder)
+    try:
+        result = original(ytid, work, audio_only=True)
+        if not result:
+            raise RuntimeError("La descarga de audio no termino correctamente")
+        files = [os.path.join(work, name) for name in os.listdir(work)
+                 if os.path.isfile(os.path.join(work, name))]
+        if len(files) != 1 or files[0].endswith((".part", ".ytdl", ".tmp")):
+            raise RuntimeError("No se pudo identificar un unico archivo de audio terminado")
+        print("[descarga] Exportando a Descargas publicas...")
+        destination = _publish(files[0])
+    except BaseException as exc:
+        message = "Descarga/exportacion de audio interrumpida. Archivos conservados en: %s" % work
+        print(message)
+        if isinstance(exc, Exception):
+            raise RuntimeError("%s\n%s" % (exc, message)) from exc
+        raise
+    else:
+        shutil.rmtree(work, ignore_errors=True)
+        print("\nGuardado: %s" % destination)
+        return result
+
+
 def install(pafy):
-    """Preserve the existing audio implementation, replacing only video downloads."""
+    """Keep audio format selection unchanged; export completed audio and video."""
     if getattr(pafy.download_video, "_android_video_mux", False):
         return
     original = pafy.download_video
 
     def dispatch(ytid, folder, audio_only=False):
         if audio_only:
-            return original(ytid, folder, audio_only=True)
+            return _download_audio(original, ytid, folder)
 
         def hook(data):
             if data.get("status") == "downloading":
