@@ -9,7 +9,9 @@
     <application
         android:name=".App"
         android:label="YewTube"
-        android:theme="@android:style/Theme.Material.NoActionBar">
+        android:theme="@android:style/Theme.Material.NoActionBar"
+        android:icon="@drawable/yewtube_approved_icon"
+        android:roundIcon="@drawable/yewtube_approved_icon">
         <activity
             android:name=".MainActivity"
             android:exported="true"
