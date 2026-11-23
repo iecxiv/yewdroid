@@ -88,4 +88,6 @@ def install(pafy):
     downloads.down_many = many
     from android_links import install as install_links
     install_links()
+    from android_playback import install as install_playback
+    install_playback()
     downloads._android_commands_installed = True
