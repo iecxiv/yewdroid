@@ -56,11 +56,19 @@ def install():
     original_playsong = player.BasePlayer._playsong
     original_play = player.BasePlayer.play
     original_error = pafy.MyLogger.error
+    original_subtitles = pafy.get_subtitles
 
     def logger_error(self, message):
         if getattr(_local, "playback", False):
             return  # The enclosing guard records the complete exception once.
         return original_error(self, message)
+
+    def optional_subtitles(*args, **kwargs):
+        # Media3 currently receives no subtitle tracks from this adapter.
+        # Upstream checks configuration objects, so False values do not avoid this call.
+        if getattr(_local, "android_queue", False):
+            return None
+        return original_subtitles(*args, **kwargs)
 
     def safe_preload(song, delay, override):
         registered = False
@@ -139,14 +147,20 @@ def install():
 
     def safe_play(self, *args, **kwargs):
         self._android_consecutive_failures = 0
+        old_queue = getattr(_local, "android_queue", False)
+        _local.android_queue = config.PLAYER.get == "androidplayer"
+        self.subtitle_path = None
         try:
             return original_play(self, *args, **kwargs)
         except _QueueExhausted as stopped:
             g.message = str(stopped)
+        finally:
+            _local.android_queue = old_queue
 
     streams._preload = safe_preload
     player.stream_details = safe_details
     player.BasePlayer._playsong = safe_playsong
     player.BasePlayer.play = safe_play
     pafy.MyLogger.error = logger_error
+    pafy.get_subtitles = optional_subtitles
     player._android_playback_guard = True
