@@ -22,7 +22,29 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
+    sourceSets.getByName("main") {
+        jniLibs.srcDir(layout.buildDirectory.dir("generated/quickjs/jniLibs"))
+        assets.srcDir(layout.buildDirectory.dir("generated/quickjs/assets"))
+    }
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+            keepDebugSymbols += "**/libqjs.so"
+        }
+    }
 }
+
+val quickJsSdk = androidComponents.sdkComponents.sdkDirectory
+val buildQuickJs by tasks.registering(Exec::class) {
+    group = "build"
+    description = "Build the Android QuickJS executable used by yt-dlp"
+    workingDir(rootProject.projectDir)
+    commandLine("bash", rootProject.file("tools/build-quickjs-android.sh").absolutePath)
+    doFirst {
+        environment("ANDROID_HOME", quickJsSdk.get().asFile.absolutePath)
+    }
+}
+tasks.named("preBuild") { dependsOn(buildQuickJs) }
 
 chaquopy {
     defaultConfig {
