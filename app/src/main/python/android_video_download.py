@@ -66,7 +66,7 @@ def download_video(ytid, folder, hook):
         # On Android 8/9 the local output is the final file: do not delete it.
         if destination == os.path.abspath(output):
             print("\nGuardado local: %s" % destination)
-            return True
+            return destination
     except BaseException as exc:
         message = "Descarga/exportacion de video interrumpida. Archivos conservados en: %s" % work
         print(message)
@@ -76,7 +76,7 @@ def download_video(ytid, folder, hook):
     else:
         shutil.rmtree(work, ignore_errors=True)
         print("\nGuardado: %s" % destination)
-        return True
+        return destination
 
 
 def _download_audio(original, ytid, folder):
@@ -105,11 +105,11 @@ def _download_audio(original, ytid, folder):
     else:
         shutil.rmtree(work, ignore_errors=True)
         print("\nGuardado: %s" % destination)
-        return result
+        return destination
 
 
 def install(pafy):
-    """Keep audio format selection unchanged; export completed audio and video."""
+    """Keep format selection; return destinations and adapt Android commands."""
     if getattr(pafy.download_video, "_android_video_mux", False):
         return
     original = pafy.download_video
@@ -129,3 +129,5 @@ def install(pafy):
 
     dispatch._android_video_mux = True
     pafy.download_video = dispatch
+    from android_commands import install as install_commands
+    install_commands(pafy)
