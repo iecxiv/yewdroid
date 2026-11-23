@@ -227,8 +227,8 @@ def _patch_js_runtime():
 
 
 def _patch_downloads():
-    """Sin ffmpeg: audio en m4a y video mp4 con audio, sin conversion ni mezcla.
-    Si todo falla, el error incluye la lista de formatos que ve yt-dlp."""
+    """Audio sin conversion; video mediante el multiplexador nativo de Android.
+    Si el audio falla, el error incluye la lista de formatos que ve yt-dlp."""
     import yt_dlp
     from mps_youtube import pafy as ypafy
 
@@ -278,6 +278,8 @@ def _patch_downloads():
         raise RuntimeError(msg)
 
     ypafy.download_video = download_video
+    from android_video_download import install
+    install(ypafy)
 
 
 def _write_config(g, files_dir):
