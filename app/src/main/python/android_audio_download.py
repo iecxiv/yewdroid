@@ -12,12 +12,11 @@ def _clean(message):
     return re.sub(r"https?://\S+", "<URL>", str(message))
 
 
-def download_audio(ytid, folder, publish, progress_callback=None, work_dir=None):
+def download_audio(ytid, folder, publish):
     import yt_dlp
     folder = os.path.abspath(folder)
     os.makedirs(folder, exist_ok=True)
-    work = os.path.abspath(work_dir) if work_dir else tempfile.mkdtemp(prefix=".yewtube-audio-", dir=folder)
-    os.makedirs(work, exist_ok=True)
+    work = tempfile.mkdtemp(prefix=".yewtube-audio-", dir=folder)
     warnings = deque(maxlen=20)
     report = {"video_id": str(ytid), "formats": []}
     for package in ("yt-dlp", "yt-dlp-ejs"):
@@ -56,8 +55,6 @@ def download_audio(ytid, folder, publish, progress_callback=None, work_dir=None)
         yield chosen
 
     def progress(data):
-        if progress_callback:
-            progress_callback(data)
         if data.get("status") == "downloading":
             total = data.get("total_bytes") or data.get("total_bytes_estimate") or 0
             if total:
@@ -94,8 +91,6 @@ def download_audio(ytid, folder, publish, progress_callback=None, work_dir=None)
         if not os.path.isfile(path) or os.path.getsize(path) == 0:
             raise RuntimeError("Archivo de audio ausente o vacio")
         print("\n[audio] Exportando archivo terminado...")
-        if progress_callback:
-            progress_callback({"status": "exporting"})
         destination = publish(path)
         if not isinstance(destination, str) or not destination:
             raise RuntimeError("La exportacion no confirmo el destino")
