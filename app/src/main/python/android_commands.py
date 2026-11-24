@@ -83,7 +83,7 @@ def install(pafy):
     misc.has_pyperclip = True
     replacements = {original_single: single, original_many: many}
     g.commands[:] = [entry._replace(function=replacements.get(entry.function, entry.function))
-                     for entry in g.commands]
+                     for entry in g.commands if entry.function is not misc.clipcopy_stream]
     downloads.download = single
     downloads.down_many = many
     from android_links import install as install_links

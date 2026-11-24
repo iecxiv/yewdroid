@@ -2,6 +2,7 @@ package iecxiv.yewtube
 
 import android.Manifest
 import android.content.ComponentName
+import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -57,6 +58,11 @@ class MainActivity : ComponentActivity() {
         val token = SessionToken(this, ComponentName(this, PlaybackService::class.java))
         future = MediaController.Builder(this, token).buildAsync()
         setContent { TerminalScreen() }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        setVolumeControlStream(AudioManager.STREAM_MUSIC)
     }
 
     override fun onDestroy() {
