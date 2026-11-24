@@ -67,9 +67,24 @@ class LinkTests(unittest.TestCase):
                 return True
         return False
 
-    def test_open_overrides_numeric_playlist(self):
-        self.dispatch("open 1")
+    def test_openwith_launches_android_open(self):
+        self.dispatch("openwith 1")
         self.assertEqual(self.calls, [("open", "https://www.youtube.com/watch?v=aaaaaaaaaaa")])
+
+    def test_numeric_open_remains_local_playlist(self):
+        self.dispatch("open 1")
+        self.assertEqual(self.calls, [("old numeric", "1")])
+
+    def test_open_never_matches_android_handlers(self):
+        for text in ("open", "open 1", "open favorites", "help open", "h open"):
+            for entry in self.g.commands:
+                if entry.function.__name__ in ("link_action", "link_help"):
+                    self.assertIsNone(entry.regex.fullmatch(text), text)
+
+    def test_openwith_playlist(self):
+        self.g.browse_mode = "ytpl"
+        self.dispatch("openwith 1")
+        self.assertEqual(self.calls, [("open", "https://www.youtube.com/playlist?list=PLtest")])
 
     def test_share_playlist(self):
         self.g.browse_mode = "ytpl"
@@ -77,9 +92,9 @@ class LinkTests(unittest.TestCase):
         self.assertEqual(self.calls, [("share", "https://www.youtube.com/playlist?list=PLtest")])
 
     def test_all_help_aliases(self):
-        for action in ("open", "share"):
-            for prefix in ("help", "h"):
-                self.dispatch(prefix + " " + action)
+        for action in ("openwith", "share"):
+            for prefix in ("help", "h", ""):
+                self.dispatch((prefix + " " + action).strip())
                 self.assertEqual(self.g.content, links._format_help(links.HELP[action]))
                 self.assertNotIn("android ", self.g.content)
                 self.assertNotIn("x N", self.g.content)
@@ -87,21 +102,21 @@ class LinkTests(unittest.TestCase):
         self.assertEqual(self.calls, [])
 
     def test_help_style_and_language(self):
-        for action, heading in (("open", "Opening Links"), ("share", "Sharing Links")):
+        for action, heading in (("openwith", "Opening Links"), ("share", "Sharing Links")):
             self.dispatch("h " + action)
             self.assertIn(heading, self.g.content)
             self.assertNotIn("Press ENTER", self.g.content)
             self.assertTrue(all(line.startswith("      ") for line in self.g.content.splitlines() if line.strip()))
-            for text in ("help open", "h open", "help share", "h share", "Ayuda:", "Pulsa"):
+            for text in ("help openwith", "h openwith", "help share", "h share", "Ayuda:", "Pulsa"):
                 self.assertNotIn(text, self.g.content)
         topics = {name: (title, body) for name, title, body in self.helptext.helptext()}
-        self.assertEqual(topics["open"][0], "Opening Links")
+        self.assertEqual(topics["openwith"][0], "Opening Links")
         self.assertEqual(topics["share"][0], "Sharing Links")
-        self.assertNotIn("open N", topics["basic"][1])
+        self.assertNotIn("openwith N", topics["basic"][1])
         self.assertNotIn("share N", topics["basic"][1])
 
     def test_enter_uses_default_flow(self):
-        self.dispatch("h open")
+        self.dispatch("h openwith")
         self.assertFalse(self.dispatch(""))
         self.assertEqual(self.calls, [])
 
@@ -110,26 +125,27 @@ class LinkTests(unittest.TestCase):
         self.assertEqual(self.calls, [("playlist", "favorites")])
 
     def test_invalid_selection_does_not_launch(self):
-        for command in ("open 0", "share 2"):
+        for command in ("openwith 0", "share 2"):
             self.dispatch(command)
             self.assertIn("fuera de rango", self.g.message)
         self.g.browse_mode = "local"
-        self.dispatch("open 1")
+        self.dispatch("openwith 1")
         self.assertEqual(self.calls, [])
 
     def test_topics_cleaned_and_added(self):
         topics = {name: body for name, title, body in self.helptext.helptext()}
-        self.assertIn("open", topics)
+        self.assertIn("openwith", topics)
         self.assertIn("share", topics)
+        self.assertNotIn("open", topics)
         self.assertNotIn("x <number>", topics["basic"])
         self.assertNotIn("X <number>", topics["basic"])
         self.assertIn("q - quit", topics["basic"])
-        self.assertNotIn("open N", topics["basic"])
+        self.assertNotIn("openwith N", topics["basic"])
         self.assertNotIn("share N", topics["basic"])
-        self.assertNotIn("open <name or ID>", topics["playlists"])
+        self.assertIn("open <name or ID>", topics["playlists"])
 
     def test_no_android_commands_or_duplicate_install(self):
-        for text in ("android", "android help", "android open 1", "android share 1"):
+        for text in ("android", "android help", "android open 1", "android openwith 1", "android share 1"):
             self.assertFalse(self.dispatch(text))
         before = list(self.g.commands)
         links.install()

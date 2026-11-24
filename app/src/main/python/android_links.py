@@ -5,9 +5,9 @@ from urllib.parse import urlencode
 
 _installed = False
 HELP = {
-    "open": (
+    "openwith": (
         "\n    Opening Links\n\n"
-        "    open N - open result N's link in a compatible app.\n"
+        "    openwith N - open result N's link in a compatible app.\n"
         "    N refers to a video or YouTube playlist in the current list.\n"
     ),
     "share": (
@@ -33,10 +33,8 @@ def _help_topics(topics):
         if name == "basic":
             body = "\n".join(line for line in body.split("\n") if not re.match(
                 r"\s*[xX]\s+<number>", re.sub(r"\x1b\[[0-9;]*m", "", line)))
-        elif name == "playlists":
-            body = body.replace("open <name or ID>", "open <name>")
         result.append((name, title, body))
-    result.extend((name, "Opening Links" if name == "open" else "Sharing Links", text)
+    result.extend((name, "Opening Links" if name == "openwith" else "Sharing Links", text)
                   for name, text in HELP.items())
     return result
 
@@ -70,24 +68,25 @@ def install():
             raise ValueError("El elemento no contiene un identificador valido")
         return "https://www.youtube.com/%s?%s" % (path, urlencode({key: identifier}))
 
-    @command(r"(open|share)\s+(\d{1,4})", "open", "share")
+    @command(r"(openwith|share)\s+(\d{1,4})", "openwith", "share")
     def link_action(action, number):
         try:
             url = current_link(number)
             from java import jclass
             app = jclass("com.chaquo.python.Python").getPlatform().getApplication()
-            result = jclass("iecxiv.yewdroid.AndroidLinks").perform(app, action, url)
+            android_action = "open" if action == "openwith" else action
+            result = jclass("iecxiv.yewdroid.AndroidLinks").perform(app, android_action, url)
             finish(str(result))
         except Exception as error:
             finish("No se pudo abrir o compartir el enlace: %s" % error)
 
-    @command(r"(?:help|h)\s+(open|share)")
-    @command(r"(open|share)")
+    @command(r"(?:help|h)\s+(openwith|share)")
+    @command(r"(openwith|share)")
     def link_help(action):
         g.content = _format_help(HELP[action])
         g.message = ""
 
-    # Numeric open now targets result links; open <name> remains a local playlist command.
+    # Keep link help ahead of generic help; never register or intercept open.
     ours = [entry for entry in g.commands if entry.function in (link_action, link_help)]
     g.commands[:] = ours + [entry for entry in g.commands if entry.function not in (link_action, link_help)]
     original_topics = helptext.helptext
