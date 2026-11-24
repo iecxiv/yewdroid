@@ -1,0 +1,43 @@
+name: One-time YewDroid refactor
+
+on:
+  push:
+    branches: [main]
+    paths: [tools/rename_yewdroid_once.py]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: yewdroid-refactor
+  cancel-in-progress: false
+
+jobs:
+  rename:
+    if: github.repository == 'iecxiv/yewtube-android'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Refactor, test and commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ github.sha }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin https://github.com/iecxiv/yewtube-android.git
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          echo "::add-mask::$auth"
+          git -c http.extraheader="AUTHORIZATION: basic $auth" fetch --depth=1 origin main
+          test "$(git rev-parse FETCH_HEAD)" = "$TARGET_SHA"
+          git checkout -b main FETCH_HEAD
+          if [ ! -f tools/rename_yewdroid_once.py ]; then exit 0; fi
+          python3 tools/rename_yewdroid_once.py
+          python3 -m unittest discover -s tests -v
+          git diff --check
+          git rm tools/rename_yewdroid_once.py
+          git add -A
+          git -c user.name='github-actions[bot]' -c user.email='github-actions[bot]@users.noreply.github.com' commit -m 'refactor: rename Android app and package to YewDroid'
+          git -c http.extraheader="AUTHORIZATION: basic $auth" push origin HEAD:main
