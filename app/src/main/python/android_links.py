@@ -8,16 +8,14 @@ HELP = {
     "open": (
         "\n    Opening Links\n\n"
         "    open N - open result N's link in a compatible app.\n"
-        "    N refers to a video or YouTube playlist in the current list.\n\n"
-        "    Press ENTER to return to the list.\n"
+        "    N refers to a video or YouTube playlist in the current list.\n"
     ),
     "share": (
         "\n    Sharing Links\n\n"
         "    share N - open the share chooser for result N's link.\n"
         "    N refers to a video or YouTube playlist in the current list.\n"
         "    Shares the YouTube link, not a downloaded file.\n"
-        "    Nothing is sent automatically: confirm in the app you choose.\n\n"
-        "    Press ENTER to return to the list.\n"
+        "    Nothing is sent automatically: confirm in the app you choose.\n"
     ),
 }
 
@@ -35,8 +33,6 @@ def _help_topics(topics):
         if name == "basic":
             body = "\n".join(line for line in body.split("\n") if not re.match(
                 r"\s*[xX]\s+<number>", re.sub(r"\x1b\[[0-9;]*m", "", line)))
-            body += ("\n    open N  - open result N's link in a compatible app.\n"
-                     "    share N - share result N's YouTube link.\n")
         elif name == "playlists":
             body = body.replace("open <name or ID>", "open <name>")
         result.append((name, title, body))

@@ -90,14 +90,20 @@ class LinkTests(unittest.TestCase):
         for action, heading in (("open", "Opening Links"), ("share", "Sharing Links")):
             self.dispatch("h " + action)
             self.assertIn(heading, self.g.content)
-            self.assertIn("Press ENTER to return to the list.", self.g.content)
+            self.assertNotIn("Press ENTER", self.g.content)
             self.assertTrue(all(line.startswith("      ") for line in self.g.content.splitlines() if line.strip()))
             for text in ("help open", "h open", "help share", "h share", "Ayuda:", "Pulsa"):
                 self.assertNotIn(text, self.g.content)
         topics = {name: (title, body) for name, title, body in self.helptext.helptext()}
         self.assertEqual(topics["open"][0], "Opening Links")
         self.assertEqual(topics["share"][0], "Sharing Links")
-        self.assertIn("share result N's YouTube link", topics["basic"][1])
+        self.assertNotIn("open N", topics["basic"][1])
+        self.assertNotIn("share N", topics["basic"][1])
+
+    def test_enter_uses_default_flow(self):
+        self.dispatch("h open")
+        self.assertFalse(self.dispatch(""))
+        self.assertEqual(self.calls, [])
 
     def test_named_playlists_preserved(self):
         self.dispatch("open favorites")
@@ -118,7 +124,8 @@ class LinkTests(unittest.TestCase):
         self.assertNotIn("x <number>", topics["basic"])
         self.assertNotIn("X <number>", topics["basic"])
         self.assertIn("q - quit", topics["basic"])
-        self.assertIn("open N", topics["basic"])
+        self.assertNotIn("open N", topics["basic"])
+        self.assertNotIn("share N", topics["basic"])
         self.assertNotIn("open <name or ID>", topics["playlists"])
 
     def test_no_android_commands_or_duplicate_install(self):
