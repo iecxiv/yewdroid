@@ -16,6 +16,13 @@ HELP_ALIASES = frozenset((
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
+def _clean_basic_help(body):
+    body = body.replace(" (See the note below)", "")
+    return re.sub(
+        r"^[ \t]*Note: This feature requires `pyperclip`.*?for more info\.[ \t]*(?:\n|$)",
+        "", body, flags=re.MULTILINE | re.DOTALL)
+
+
 def install():
     from mps_youtube import config, g, helptext
     from mps_youtube.commands import Command, config as config_commands, lastfm
@@ -29,6 +36,8 @@ def install():
         result = []
         for name, title, body in original_topics():
             if name not in REMOVED:
+                if name == "basic":
+                    body = _clean_basic_help(body)
                 # Other retained topics must not advertise the disabled set command.
                 body = "\n".join(line for line in body.split("\n")
                                  if not re.match(r"\s*set(?:\s|$)", ANSI.sub("", line)))
