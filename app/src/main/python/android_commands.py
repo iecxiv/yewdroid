@@ -92,4 +92,6 @@ def install(pafy):
     install_playback()
     from android_streams import install as install_streams
     install_streams()
+    from android_features import install as install_features
+    install_features()
     downloads._android_commands_installed = True
