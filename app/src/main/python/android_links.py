@@ -6,22 +6,25 @@ from urllib.parse import urlencode
 _installed = False
 HELP = {
     "open": (
-        "Abrir un enlace\n\n"
-        "open N  Abre el enlace del resultado N en una app compatible.\n"
-        "N corresponde a un video o una playlist de YouTube de la lista actual.\n\n"
-        "Ayuda: help open o h open.\n"
-        "Pulsa ENTER para volver a la lista."
+        "\n    Opening Links\n\n"
+        "    open N - open result N's link in a compatible app.\n"
+        "    N refers to a video or YouTube playlist in the current list.\n\n"
+        "    Press ENTER to return to the list.\n"
     ),
     "share": (
-        "Compartir un enlace\n\n"
-        "share N  Abre el selector para compartir el enlace del resultado N.\n"
-        "N corresponde a un video o una playlist de YouTube de la lista actual.\n"
-        "Se comparte el enlace de YouTube, no un archivo descargado.\n"
-        "No se envia nada automaticamente: confirma en la app elegida.\n\n"
-        "Ayuda: help share o h share.\n"
-        "Pulsa ENTER para volver a la lista."
+        "\n    Sharing Links\n\n"
+        "    share N - open the share chooser for result N's link.\n"
+        "    N refers to a video or YouTube playlist in the current list.\n"
+        "    Shares the YouTube link, not a downloaded file.\n"
+        "    Nothing is sent automatically: confirm in the app you choose.\n\n"
+        "    Press ENTER to return to the list.\n"
     ),
 }
+
+
+def _format_help(text):
+    # Match the extra two-space indentation applied by upstream get_help.
+    return "\n  ".join(text.split("\n"))
 
 
 def _help_topics(topics):
@@ -32,12 +35,12 @@ def _help_topics(topics):
         if name == "basic":
             body = "\n".join(line for line in body.split("\n") if not re.match(
                 r"\s*[xX]\s+<number>", re.sub(r"\x1b\[[0-9;]*m", "", line)))
-            body += ("\n    open N  - Abre el enlace del resultado N.\n"
-                     "    share N - Comparte el enlace del resultado N.\n")
+            body += ("\n    open N  - open result N's link in a compatible app.\n"
+                     "    share N - share result N's YouTube link.\n")
         elif name == "playlists":
             body = body.replace("open <name or ID>", "open <name>")
         result.append((name, title, body))
-    result.extend((name, "Abrir enlaces" if name == "open" else "Compartir enlaces", text)
+    result.extend((name, "Opening Links" if name == "open" else "Sharing Links", text)
                   for name, text in HELP.items())
     return result
 
@@ -85,7 +88,7 @@ def install():
     @command(r"(?:help|h)\s+(open|share)")
     @command(r"(open|share)")
     def link_help(action):
-        g.content = HELP[action]
+        g.content = _format_help(HELP[action])
         g.message = ""
 
     # Numeric open now targets result links; open <name> remains a local playlist command.
