@@ -70,6 +70,8 @@ fun TerminalScreen() {
     val ctx = LocalContext.current
     val zoomFlow = remember(ctx.applicationContext) { TerminalPreferences.zoom(ctx.applicationContext) }
     val savedZoom by zoomFlow.collectAsState(initial = null)
+    val historyFlow = remember(ctx.applicationContext) { TerminalPreferences.history(ctx.applicationContext) }
+    val savedHistory by historyFlow.collectAsState(initial = null)
     var selectedZoom by remember { mutableStateOf<Float?>(null) }
     val currentZoom = selectedZoom ?: savedZoom
     val uiStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = FG)
@@ -77,7 +79,7 @@ fun TerminalScreen() {
     LaunchedEffect(Unit) {
         if (Build.VERSION.SDK_INT >= 33) permLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
-    if (currentZoom == null) {
+    if (currentZoom == null || savedHistory == null) {
         Box(Modifier.fillMaxSize().background(BG).systemBarsPadding(), contentAlignment = Alignment.Center) {
             Text("Cargando terminal...", style = uiStyle)
         }
@@ -89,7 +91,7 @@ fun TerminalScreen() {
     val audioOn by TerminalHub.audioOn.collectAsState()
     val now by TerminalHub.nowPlaying.collectAsState()
     var input by rememberSaveable { mutableStateOf("") }
-    val history = remember { mutableStateListOf<String>() }
+    val history = savedHistory.orEmpty()
     var hIdx by remember { mutableIntStateOf(-1) }
     val listState = rememberLazyListState()
     val density = LocalDensity.current
@@ -111,7 +113,7 @@ fun TerminalScreen() {
     fun submit() {
         val line = input
         TerminalHub.sendLine(line)
-        if (line.isNotBlank()) history.add(line)
+        TerminalPreferences.addHistory(ctx, line)
         input = ""
         hIdx = -1
     }

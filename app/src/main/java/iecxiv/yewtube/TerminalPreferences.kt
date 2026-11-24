@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -14,14 +15,20 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONException
 import java.io.IOException
 
 private val Context.terminalDataStore by preferencesDataStore(name = "terminal_preferences")
 
 object TerminalPreferences {
+    private const val MAX_HISTORY = 500
     private val fontSize = floatPreferencesKey("font_size_sp")
+    private val commandHistory = stringPreferencesKey("command_history_json")
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val writes = Channel<Pair<Context, Float>>(Channel.CONFLATED)
+    // Append commands in order: unlike zoom changes, commands must not be conflated.
+    private val historyWrites = Channel<Pair<Context, String>>(Channel.UNLIMITED)
 
     init {
         scope.launch {
@@ -31,6 +38,19 @@ object TerminalPreferences {
                 } catch (error: IOException) {
                     Log.e("TerminalPreferences", "Cannot save zoom", error)
                     TerminalHub.onWrite("\n[ajustes] No se pudo guardar el zoom.\n")
+                }
+            }
+        }
+        scope.launch {
+            for ((context, line) in historyWrites) {
+                try {
+                    context.terminalDataStore.edit { values ->
+                        val history = (decodeHistory(values[commandHistory]) + line).takeLast(MAX_HISTORY)
+                        values[commandHistory] = JSONArray(history).toString()
+                    }
+                } catch (error: IOException) {
+                    Log.e("TerminalPreferences", "Cannot save command history", error)
+                    TerminalHub.onWrite("\n[historial] No se pudo guardar el comando.\n")
                 }
             }
         }
@@ -50,5 +70,35 @@ object TerminalPreferences {
 
     fun save(context: Context, size: Float) {
         if (size.isFinite()) writes.trySend(context.applicationContext to size.coerceIn(7f, 20f))
+    }
+
+    fun history(context: Context): Flow<List<String>?> = context.applicationContext.terminalDataStore.data
+        .catch { error ->
+            if (error is IOException) {
+                Log.e("TerminalPreferences", "Cannot read command history", error)
+                TerminalHub.onWrite("\n[historial] No se pudo leer el historial guardado.\n")
+                emit(emptyPreferences())
+            } else throw error
+        }
+        .map { values -> decodeHistory(values[commandHistory]) }
+
+    fun addHistory(context: Context, line: String) {
+        if (line.isNotBlank()) historyWrites.trySend(context.applicationContext to line)
+    }
+
+    private fun decodeHistory(raw: String?): List<String> {
+        if (raw == null) return emptyList()
+        return try {
+            val array = JSONArray(raw)
+            buildList {
+                for (index in (array.length() - MAX_HISTORY).coerceAtLeast(0) until array.length()) {
+                    val line = array.opt(index) as? String
+                    if (line != null && line.isNotBlank()) add(line)
+                }
+            }
+        } catch (error: JSONException) {
+            Log.e("TerminalPreferences", "Invalid command history JSON", error)
+            emptyList()
+        }
     }
 }
