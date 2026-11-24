@@ -1,4 +1,4 @@
-package iecxiv.yewtube
+package iecxiv.yewdroid
 
 import android.content.Intent
 import androidx.media3.common.AudioAttributes

@@ -1,4 +1,4 @@
-# YewTube Android
+# YewDroid
 
 yewtube (mps_youtube, instalado desde PyPI) ejecutandose dentro de una app nativa Android con Chaquopy.
 
@@ -8,3 +8,11 @@ yewtube (mps_youtube, instalado desde PyPI) ejecutandose dentro de una app nativ
 
 Requisitos: Android Studio (JBR 21), Python 3.13 con pip y venv en el PC de compilacion.
 Licencia: yewtube es GPL-3.0; uso personal.
+
+
+## Attribution
+
+Modified version of yewtube, adapted and simplified for native Android use.
+Based on yewtube and mps-youtube; original credits and licensing are retained.
+
+Project: https://github.com/iecxiv/yewtube-android

@@ -1,4 +1,4 @@
-package iecxiv.yewtube
+package iecxiv.yewdroid
 
 import android.Manifest
 import android.content.ComponentName
@@ -126,7 +126,7 @@ fun TerminalScreen() {
 
     Column(Modifier.fillMaxSize().background(BG).systemBarsPadding().imePadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("yewtube", color = ACCENT, style = uiStyle, modifier = Modifier.weight(1f))
+            Text("YewDroid", color = ACCENT, style = uiStyle, modifier = Modifier.weight(1f))
             Text("A-", color = FG, style = uiStyle, modifier = Modifier
                 .clickableNoRipple { changeZoom(-1f) }.padding(12.dp))
             Text("A+", color = FG, style = uiStyle, modifier = Modifier

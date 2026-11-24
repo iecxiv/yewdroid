@@ -1,4 +1,4 @@
-package iecxiv.yewtube
+package iecxiv.yewdroid
 
 import android.content.Context
 import androidx.media3.common.MediaItem

@@ -1,4 +1,4 @@
-package iecxiv.yewtube
+package iecxiv.yewdroid
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -18,7 +18,7 @@ object AndroidClipboard {
             val clipboard = checkNotNull(
                 context.applicationContext.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
             ) { "Clipboard unavailable" }
-            clipboard.setPrimaryClip(ClipData.newPlainText("YewTube", text))
+            clipboard.setPrimaryClip(ClipData.newPlainText("YewDroid", text))
             Unit
         }
         if (Looper.myLooper() == Looper.getMainLooper()) task.run()

@@ -1,4 +1,4 @@
-package iecxiv.yewtube
+package iecxiv.yewdroid
 
 import android.content.ContentValues
 import android.content.Context
@@ -24,7 +24,7 @@ object DownloadPublisher {
             else -> MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
                 ?: "application/octet-stream"
         }
-        val relativePath = Environment.DIRECTORY_DOWNLOADS + "/YewTube/"
+        val relativePath = Environment.DIRECTORY_DOWNLOADS + "/YewDroid/"
         val resolver = context.applicationContext.contentResolver
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, source.name)

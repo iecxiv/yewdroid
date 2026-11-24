@@ -77,7 +77,7 @@ def install(pafy):
     def copy(text):
         from java import jclass
         app = jclass("com.chaquo.python.Python").getPlatform().getApplication()
-        jclass("iecxiv.yewtube.AndroidClipboard").copy(app, str(text))
+        jclass("iecxiv.yewdroid.AndroidClipboard").copy(app, str(text))
 
     misc.pyperclip = types.SimpleNamespace(copy=copy)
     misc.has_pyperclip = True

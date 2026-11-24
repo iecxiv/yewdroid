@@ -76,7 +76,7 @@ def install():
             url = current_link(number)
             from java import jclass
             app = jclass("com.chaquo.python.Python").getPlatform().getApplication()
-            result = jclass("iecxiv.yewtube.AndroidLinks").perform(app, action, url)
+            result = jclass("iecxiv.yewdroid.AndroidLinks").perform(app, action, url)
             finish(str(result))
         except Exception as error:
             finish("No se pudo abrir o compartir el enlace: %s" % error)

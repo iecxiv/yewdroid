@@ -409,11 +409,16 @@ def _run(files_dir):
                 _write_config(g, files_dir)
                 ymain.main()
             except (SystemExit, KeyboardInterrupt):
-                pass
+                sys.stdout.write(
+                    "\nYewDroid\n"
+                    "Modified version of yewtube, adapted and simplified for native Android use.\n"
+                    "Based on yewtube %s and mps-youtube.\n"
+                    "Project: https://github.com/iecxiv/yewtube-android\n"
+                    % getattr(ymain, "__version__", "unknown"))
             except Exception:
                 traceback.print_exc(file=_orig_err)
                 traceback.print_exc(file=sys.stdout)
-            sys.stdout.write("\n\x1b[33m[sesion terminada] Pulsa ENTER para reiniciar yewtube\x1b[0m\n")
+            sys.stdout.write("\n\x1b[33m[sesion terminada] Pulsa ENTER para reiniciar YewDroid\x1b[0m\n")
             while True:
                 item = _in.q.get()
                 if item is not _INTR:

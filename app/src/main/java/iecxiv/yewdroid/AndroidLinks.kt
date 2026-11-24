@@ -1,4 +1,4 @@
-package iecxiv.yewtube
+package iecxiv.yewdroid
 
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -28,7 +28,7 @@ object AndroidLinks {
                 type = "text/plain"
                 putExtra(Intent.EXTRA_TEXT, url)
             }
-            Intent.createChooser(send, "Compartir enlace de YewTube")
+            Intent.createChooser(send, "Compartir enlace de YewDroid")
         }
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         val task = FutureTask<String> {

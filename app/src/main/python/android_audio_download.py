@@ -16,7 +16,7 @@ def download_audio(ytid, folder, publish):
     import yt_dlp
     folder = os.path.abspath(folder)
     os.makedirs(folder, exist_ok=True)
-    work = tempfile.mkdtemp(prefix=".yewtube-audio-", dir=folder)
+    work = tempfile.mkdtemp(prefix=".yewdroid-audio-", dir=folder)
     warnings = deque(maxlen=20)
     report = {"video_id": str(ytid), "formats": []}
     for package in ("yt-dlp", "yt-dlp-ejs"):

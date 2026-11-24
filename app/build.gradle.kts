@@ -6,10 +6,10 @@ plugins {
 }
 
 android {
-    namespace = "iecxiv.yewtube"
+    namespace = "iecxiv.yewdroid"
     compileSdk = 35
     defaultConfig {
-        applicationId = "iecxiv.yewtube"
+        applicationId = "iecxiv.yewdroid"
         minSdk = 26
         targetSdk = 35
         versionCode = 1

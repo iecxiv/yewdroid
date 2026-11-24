@@ -134,7 +134,7 @@ def install():
             current = getattr(getattr(g, "PLAYER_OBJ", None), "stream", {})
             metadata = current if isinstance(current, dict) and current.get("url") == url else {}
             payload = {"headers": metadata.get("http_headers", {}), "mime": metadata.get("mime", "")}
-            jclass("iecxiv.yewtube.AndroidStreamSources").register(str(url), json.dumps(payload))
+            jclass("iecxiv.yewdroid.AndroidStreamSources").register(str(url), json.dumps(payload))
             return original_sink.play(url, title, artist, thumb, length)
 
     g.streams.clear()  # Discard metadata produced by the old adapter.

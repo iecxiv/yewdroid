@@ -1,4 +1,4 @@
-package iecxiv.yewtube
+package iecxiv.yewdroid
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
