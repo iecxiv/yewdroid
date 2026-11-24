@@ -1,4 +1,4 @@
-"""Resize and repaginate on the input thread, never by submitting commands."""
+"""Resize the visible result window without changing logical page boundaries."""
 from collections import deque
 from functools import wraps
 import sys
@@ -24,57 +24,107 @@ def install(term):
     renders = deque(maxlen=32)
     last = [None]
     page_state = [None]
+    rendering = [False]
+    forced_stride = [None]
     redraw = [lambda: None]
     original_patch = term._patch_traceback
+    screen_installed = [False]
 
     def install_screen():
         original_patch()
+        if screen_installed[0]:
+            return
+        screen_installed[0] = True
         from mps_youtube import content, g, screen, util
         from mps_youtube.commands import songlist
         original_update = screen.update
         original_paginate = songlist.paginatesongs
+        real_getxy = util.getxy
+        original_page_msg = content.page_msg
+
+        @wraps(real_getxy)
+        def getxy():
+            xy = real_getxy()
+            if rendering[0] or isinstance(g.content, content.PaginatedContent):
+                return xy
+            stride = forced_stride[0]
+            state = page_state[0]
+            if (stride is None and state and g.browse_mode == "normal"
+                    and g.last_search_query is state["query"]):
+                stride = state["stride"]
+            return xy if stride is None else xy._replace(max_results=stride)
+
+        _replace_aliases(real_getxy, getxy)
+
+        @wraps(original_page_msg)
+        def page_msg(*args, **kwargs):
+            previous = rendering[0]
+            rendering[0] = False
+            try:
+                return original_page_msg(*args, **kwargs)
+            finally:
+                rendering[0] = previous
+
+        _replace_aliases(original_page_msg, page_msg)
+
+        def resize_results():
+            state = page_state[0]
+            if not state or g.browse_mode != "normal":
+                return False
+            if (g.last_search_query is not state["query"]
+                    or g.current_page != state["page"]
+                    or tuple(id(song) for song in g.model) != state["items"]):
+                return False
+            visible = max(1, real_getxy().max_results)
+            if visible == state["visible"] or state["length"] <= 0:
+                return False
+            start = state["page"] * state["stride"]
+            source = state["source"]
+            songs = list(source(start, start + visible) if callable(source)
+                         else source[start:start + visible])
+            g.model.songs = songs
+            state.update(visible=visible, items=tuple(id(song) for song in songs))
+            return True
 
         @wraps(original_paginate)
         def paginate(func, page=0, splash=True, dumps=False, length=None,
                      msg=None, failmsg=None, loadmsg=None):
-            result = original_paginate(func, page=page, splash=splash, dumps=dumps,
-                length=length, msg=msg, failmsg=failmsg, loadmsg=loadmsg)
-            page_state[0] = None if dumps else {
-                "source": func, "page": g.current_page,
-                "size": max(1, util.getxy().max_results),
-                "length": g.result_count, "query": g.last_search_query,
-                "items": tuple(id(song) for song in g.model),
-            }
+            previous = page_state[0]
+            same_source = (previous and previous["source"] is func
+                           and g.last_search_query is previous["query"])
+            stride = previous["stride"] if same_source else max(1, real_getxy().max_results)
+            old_forced = forced_stride[0]
+            forced_stride[0] = None if dumps else stride
+            if dumps:
+                page_state[0] = None
+            try:
+                result = original_paginate(func, page=page, splash=splash, dumps=dumps,
+                    length=length, msg=msg, failmsg=failmsg, loadmsg=loadmsg)
+            finally:
+                forced_stride[0] = old_forced
+            if not dumps:
+                page_state[0] = {
+                    "source": func, "page": g.current_page, "stride": stride,
+                    "visible": stride, "length": g.result_count,
+                    "query": g.last_search_query,
+                    "items": tuple(id(song) for song in g.model),
+                }
+                if resize_results():
+                    g.content = content.generate_songlist_display()
             return result
 
         _replace_aliases(original_paginate, paginate)
-
-        def repaginate():
-            state = page_state[0]
-            if not state or g.browse_mode != "normal":
-                return
-            if (g.last_search_query is not state["query"]
-                    or g.current_page != state["page"]
-                    or tuple(id(song) for song in g.model) != state["items"]):
-                # Do not undo edits, shuffles or a switch to another result source.
-                return
-            size = max(1, util.getxy().max_results)
-            if size == state["size"] or state["length"] <= 0:
-                return
-            anchor = state["page"] * state["size"]
-            page = min(anchor // size, (state["length"] - 1) // size)
-            start, end = page * size, (page + 1) * size
-            source = state["source"]
-            songs = list(source(start, end) if callable(source) else source[start:end])
-            g.model.songs = songs
-            g.current_page = page
-            state.update(page=page, size=size, items=tuple(id(song) for song in songs))
 
         def remember_renderer(fn):
             @wraps(fn)
             def generate(*args, **kwargs):
                 g.detectable_size = True
-                result = fn(*args, **kwargs)
+                previous = rendering[0]
+                rendering[0] = True
+                try:
+                    result = fn(*args, **kwargs)
+                finally:
+                    rendering[0] = previous
                 renders.append((result, fn, args, kwargs))
                 return result
             return generate
@@ -103,10 +153,10 @@ def install(term):
                 if renderer is not None:
                     fn, args, kwargs = renderer
                     if fn.__name__ == "generate_songlist_display":
-                        repaginate()
-                    value = fn(*args, **kwargs)
+                        resize_results()
+                    # Go through the wrapper so only drawing uses the visible row count.
+                    value = remember_renderer(fn)(*args, **kwargs)
                 g.content = value
-                # Keep the newly calculated page indicator on subsequent resizes.
                 last[0] = (value, renderer, g.message, g.rprompt)
                 original_update()
             finally:
