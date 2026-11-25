@@ -3,10 +3,29 @@ import os
 import shutil
 import subprocess
 import tempfile
+from types import SimpleNamespace
 
 
 class DownloadCancelled(Exception):
     pass
+
+
+def _colors():
+    try:
+        from mps_youtube import c
+        return c
+    except Exception:
+        return SimpleNamespace(r="", g="", y="", w="")
+
+
+def _duration(seconds):
+    try:
+        seconds = int(seconds)
+    except (TypeError, ValueError):
+        return ""
+    hours, rest = divmod(seconds, 3600)
+    minutes, secs = divmod(rest, 60)
+    return "%d:%02d:%02d" % (hours, minutes, secs) if hours else "%d:%02d" % (minutes, secs)
 
 
 def kind(fmt):
@@ -33,27 +52,43 @@ def ffmpeg_ready():
     return True
 
 
-def choose(rows, title, ffmpeg=False):
+def choose(rows, info, ffmpeg=False, prompt="Download number: ", extra=None):
     from mps_youtube import g, screen
-    lines = [title, "N  ID  Type  Extension  Quality  Video / audio codec  Approx. size"]
+    c = _colors()
+    title = str(info.get("title") or info.get("id"))
+    uploader = info.get("uploader") or info.get("channel")
+    lines = ["  %s%s%s" % (c.r, title, c.w)]
+    if uploader:
+        lines.append(c.r + "  Uploaded by " + str(uploader) + c.w)
+    length = _duration(info.get("duration"))
+    if length:
+        lines.append("  [" + length + "]")
+    lines.append("")
+    lines.append("  %s%-6s %-8s %-13s %-11s %-8s %s%s" % (
+        c.w, "Item", "Format", "Quality", "Media", "Size", "Notes", c.w))
+    lines.append("")
     for number, fmt in enumerate(rows, 1):
         size = fmt.get("filesize") or fmt.get("filesize_approx")
-        size = "%.1f MiB" % (size / 1048576) if size else "?"
+        size = "%5s Mb" % int(size / 1048576) if size else "%5s   " % "?"
         quality = fmt.get("resolution") or ("%sp" % fmt["height"] if fmt.get("height") else "%s kbps" % fmt.get("abr", "?"))
-        lines.append("%d  %s  %s  %s  %s  %s / %s  %s" % (
-            number, fmt.get("format_id"), kind(fmt), fmt.get("ext"), quality,
-            fmt.get("vcodec"), fmt.get("acodec"), size))
-    note = "FFmpeg: merges into MKV without re-encoding; depends on the build's support." if ffmpeg else "Without FFmpeg: merges only MP4/H.264 + M4A/AAC."
-    lines += ["", note, "Enter cancels without downloading."]
+        notes = "id %s; %s / %s" % (fmt.get("format_id"), fmt.get("vcodec"), fmt.get("acodec"))
+        lines.append("  %s%-6s %-8s %-13s %-11s %s  %s%s" % (
+            c.g, number, fmt.get("ext"), quality, kind(fmt), size, notes, c.w))
+    lines.append("")
+    if extra:
+        lines.append(extra)
+    lines.append("FFmpeg: merges into MKV without re-encoding; depends on the build's support." if ffmpeg
+                 else "Without FFmpeg: merges only MP4/H.264 + M4A/AAC.")
+    lines.append("Select [%s1-%d%s] to download or [%sEnter%s] to return" % (c.y, len(rows), c.w, c.y, c.w))
     g.content = "\n".join(lines)
     screen.update()
     while True:
-        answer = input("Format (row number): ").strip()
+        answer = input(prompt).strip()
         if not answer:
             raise DownloadCancelled()
         if answer.isdigit() and 1 <= int(answer) <= len(rows):
             return rows[int(answer) - 1]
-        print("Selection out of range.")
+        print(c.y + "Selection out of range." + c.w)
 
 
 def plan(ydl, info, mode, ffmpeg=False):
@@ -62,13 +97,13 @@ def plan(ydl, info, mode, ffmpeg=False):
     if not rows:
         raise RuntimeError("No downloadable formats in this extraction")
     if mode in ("d", "dl", "download"):
-        selected = choose(rows, str(info.get("title") or info.get("id")), ffmpeg)
+        selected = choose(rows, info, ffmpeg)
         if kind(selected) != "video":
             return [selected]
         audio = [fmt for fmt in rows if kind(fmt) == "audio" and (ffmpeg or can_mux(selected, fmt))]
         if not audio:
             raise RuntimeError("No audio compatible with the available backend; nothing was downloaded")
-        return [selected, choose(audio, "Select the audio to merge with the video", ffmpeg)]
+        return [selected, choose(audio, info, ffmpeg, "Audio stream: ", "Select the audio to merge with the video")]
     selector = "ba" if mode.startswith("da") else "bv*+ba/b"
     selections = list(ydl.build_format_selector(selector)({"formats": rows, "incomplete_formats": False, "has_merged_format": any(kind(fmt) == "video+audio" for fmt in rows)}))
     if not selections:
@@ -89,6 +124,7 @@ def download(ytid, folder, mode):
     import yt_dlp
     from android_video_download import _publish
     from android_encode import selected_profile, accepts, validate, apply_profile
+    c = _colors()
     folder = os.path.abspath(folder)
     options = {"quiet": True, "noplaylist": True, "postprocessors": [], "fixup": "never",
                "hls_prefer_native": True, "retries": 3, "fragment_retries": 3, "socket_timeout": 25}
@@ -116,7 +152,7 @@ def download(ytid, folder, mode):
             if data.get("status") == "downloading":
                 total = data.get("total_bytes") or data.get("total_bytes_estimate")
                 if total:
-                    print("\r  Downloading %.1f%%" % (100 * data.get("downloaded_bytes", 0) / total), end="", flush=True)
+                    print("\r  Downloading %s%.1f%%%s" % (c.y, 100 * data.get("downloaded_bytes", 0) / total, c.w), end="", flush=True)
         for index, track in enumerate(tracks):
             format_id = str(track["format_id"])
             print("\n[download] Format %s (%s)" % (format_id, track.get("ext")))
@@ -164,7 +200,7 @@ def download(ytid, folder, mode):
         if not isinstance(destination, str) or not destination:
             raise RuntimeError("The export did not confirm the destination")
     except BaseException:
-        print("\nDownload interrupted. Files kept: " + work)
+        print("\n" + c.r + "Download interrupted. Files kept: " + work + c.w)
         raise
     if profile and not delete_original:
         print("[encode] Original kept locally: " + paths[0])
@@ -172,5 +208,5 @@ def download(ytid, folder, mode):
         shutil.rmtree(work, ignore_errors=True)
     elif profile and delete_original and paths[0] != output:
         os.unlink(paths[0])
-    print("\nSaved: " + destination)
+    print("\nSaved: " + c.g + destination + c.w)
     return destination
