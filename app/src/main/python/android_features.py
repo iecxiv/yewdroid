@@ -14,7 +14,7 @@ HELP_ALIASES = frozenset((
     "lastfm_connect"
 ).split())
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
-TOPIC_LINE = re.compile(r"^((?:\x1b\[[0-9;]*m)? {5})(\S+) *((?:\x1b\[[0-9;]*m)?) : (.*)$", re.MULTILINE)
+TOPIC_LINE = re.compile(r"^((?:\x1b\[[0-9;]*m)? {5})([^\s\x1b]+) *((?:\x1b\[[0-9;]*m)?) : (.*)$", re.MULTILINE)
 
 
 def _align_topics(text):
