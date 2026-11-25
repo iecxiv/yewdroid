@@ -101,12 +101,17 @@ class TermBuffer(private val maxLines: Int = 1500) {
                 ']' -> state = 3
                 else -> state = 0
             }
-            2 -> if (ch.isDigit() || ch == ';' || ch == '?') param.append(ch) else { csi(ch); state = 0 }
+            2 -> when {
+                ch.isDigit() || ch == ';' || ch == '?' -> param.append(ch)
+                ch in ' '..'/' -> state = 5
+                else -> { csi(ch); state = 0 }
+            }
             3 -> when (ch) {
                 '\u0007' -> state = 0
                 '\u001b' -> state = 4
                 else -> {}
             }
+            5 -> if (ch in '@'..'~') state = 0
             else -> state = 0
         }
     }

@@ -38,7 +38,7 @@ class _Out:
         pass
 
     def isatty(self):
-        return False
+        return True
 
     def writable(self):
         return True
