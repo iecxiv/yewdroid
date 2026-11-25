@@ -177,7 +177,7 @@ fun TerminalScreen() {
     if (isFull) {
         Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
             VideoSurface(Modifier.aspectRatio(videoAspect.coerceAtLeast(0.2f)))
-            VideoControls(true, { fullscreen = false }, Modifier.fillMaxSize())
+            FullscreenControls({ fullscreen = false }, Modifier.fillMaxSize())
         }
         return
     }
@@ -198,7 +198,9 @@ fun TerminalScreen() {
                     if (landscape) Modifier.height(150.dp).aspectRatio(ratio)
                     else Modifier.fillMaxWidth().aspectRatio(ratio)
                 )
-                VideoControls(false, { fullscreen = true }, Modifier.matchParentSize())
+                Box(Modifier.align(Alignment.TopEnd).background(Color(0x66000000))) {
+                    CtrlBtn(Icons.Filled.Fullscreen) { fullscreen = true }
+                }
             }
         }
 
@@ -227,15 +229,13 @@ fun TerminalScreen() {
         if (playing) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
                 Text(now, color = ACCENT, style = uiStyle, maxLines = 1)
-                if (!videoOn) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                        CtrlBtn(Icons.Filled.SkipPrevious) { TerminalHub.control("prev") }
-                        CtrlBtn(Icons.Filled.Replay10) { TerminalHub.control("seekb") }
-                        CtrlBtn(if (audioOn) Icons.Filled.Pause else Icons.Filled.PlayArrow) { TerminalHub.control("toggle") }
-                        CtrlBtn(Icons.Filled.Forward10) { TerminalHub.control("seekf") }
-                        CtrlBtn(Icons.Filled.SkipNext) { TerminalHub.control("next") }
-                        CtrlBtn(Icons.Filled.Stop) { TerminalHub.control("stop") }
-                    }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    CtrlBtn(Icons.Filled.SkipPrevious) { TerminalHub.control("prev") }
+                    CtrlBtn(Icons.Filled.Replay10) { TerminalHub.control("seekb") }
+                    CtrlBtn(if (audioOn) Icons.Filled.Pause else Icons.Filled.PlayArrow) { TerminalHub.control("toggle") }
+                    CtrlBtn(Icons.Filled.Forward10) { TerminalHub.control("seekf") }
+                    CtrlBtn(Icons.Filled.SkipNext) { TerminalHub.control("next") }
+                    CtrlBtn(Icons.Filled.Stop) { TerminalHub.control("stop") }
                 }
             }
         } else {
@@ -318,43 +318,33 @@ private fun formatTime(ms: Long): String {
 }
 
 @Composable
-private fun VideoControls(fullscreen: Boolean, onFullscreen: () -> Unit, modifier: Modifier) {
+private fun FullscreenControls(onExit: () -> Unit, modifier: Modifier) {
     val audioOn by TerminalHub.audioOn.collectAsState()
     val position by TerminalHub.positionMs.collectAsState()
     val duration by TerminalHub.durationMs.collectAsState()
     var visible by remember { mutableStateOf(true) }
-    var touch by remember { mutableIntStateOf(0) }
     var dragging by remember { mutableStateOf<Float?>(null) }
     val label = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = Color.White)
-    LaunchedEffect(visible, touch, audioOn, dragging) {
-        if (visible && audioOn && dragging == null) {
-            delay(3000)
-            visible = false
-        }
-    }
-    Box(modifier.clickableNoRipple { visible = !visible; touch++ }) {
+    Box(modifier.clickableNoRipple { visible = !visible }) {
         if (visible) {
             Column(
                 Modifier.fillMaxSize().background(Color(0x88000000)),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    CtrlBtn(if (fullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen) {
-                        touch++
-                        onFullscreen()
-                    }
+                    CtrlBtn(Icons.Filled.FullscreenExit) { onExit() }
                 }
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    CtrlBtn(Icons.Filled.SkipPrevious) { touch++; TerminalHub.control("prev") }
-                    CtrlBtn(Icons.Filled.Replay10) { touch++; TerminalHub.control("seekb") }
-                    CtrlBtn(if (audioOn) Icons.Filled.Pause else Icons.Filled.PlayArrow) { touch++; TerminalHub.control("toggle") }
-                    CtrlBtn(Icons.Filled.Forward10) { touch++; TerminalHub.control("seekf") }
-                    CtrlBtn(Icons.Filled.SkipNext) { touch++; TerminalHub.control("next") }
-                    CtrlBtn(Icons.Filled.Stop) { touch++; TerminalHub.control("stop") }
+                    CtrlBtn(Icons.Filled.SkipPrevious) { TerminalHub.control("prev") }
+                    CtrlBtn(Icons.Filled.Replay10) { TerminalHub.control("seekb") }
+                    CtrlBtn(if (audioOn) Icons.Filled.Pause else Icons.Filled.PlayArrow) { TerminalHub.control("toggle") }
+                    CtrlBtn(Icons.Filled.Forward10) { TerminalHub.control("seekf") }
+                    CtrlBtn(Icons.Filled.SkipNext) { TerminalHub.control("next") }
+                    CtrlBtn(Icons.Filled.Stop) { TerminalHub.control("stop") }
                 }
                 Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(formatTime(position), style = label)
@@ -364,7 +354,6 @@ private fun VideoControls(fullscreen: Boolean, onFullscreen: () -> Unit, modifie
                         onValueChangeFinished = {
                             dragging?.let { TerminalHub.seekTo((it * duration).toLong()) }
                             dragging = null
-                            touch++
                         },
                         enabled = duration > 0,
                         colors = SliderDefaults.colors(
