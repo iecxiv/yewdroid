@@ -195,8 +195,9 @@ fun TerminalScreen() {
         if (showVideo) {
             var overlay by remember { mutableStateOf(true) }
             var tick by remember { mutableIntStateOf(0) }
-            LaunchedEffect(overlay, tick) {
-                if (overlay) {
+            var dragging by remember { mutableStateOf(false) }
+            LaunchedEffect(overlay, tick, dragging) {
+                if (overlay && !dragging) {
                     delay(AUTO_HIDE_MS)
                     overlay = false
                 }
@@ -216,7 +217,8 @@ fun TerminalScreen() {
                     }
                     SeekBar(
                         Modifier.align(Alignment.BottomCenter).background(Color(0x66000000)),
-                        onInteract = { tick++ }
+                        onInteract = { tick++ },
+                        onDragChange = { dragging = it }
                     )
                 }
             }
@@ -336,19 +338,31 @@ private fun formatTime(ms: Long): String {
 }
 
 @Composable
-private fun SeekBar(modifier: Modifier = Modifier, onInteract: () -> Unit = {}) {
+private fun SeekBar(
+    modifier: Modifier = Modifier,
+    onInteract: () -> Unit = {},
+    onDragChange: (Boolean) -> Unit = {}
+) {
     val position by TerminalHub.positionMs.collectAsState()
     val duration by TerminalHub.durationMs.collectAsState()
     var dragging by remember { mutableStateOf<Float?>(null) }
+    DisposableEffect(Unit) {
+        onDispose { onDragChange(false) }
+    }
     val label = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = Color.White)
     Row(modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(formatTime(position), style = label)
         Slider(
             value = dragging ?: if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f,
-            onValueChange = { dragging = it; onInteract() },
+            onValueChange = {
+                if (dragging == null) onDragChange(true)
+                dragging = it
+                onInteract()
+            },
             onValueChangeFinished = {
                 dragging?.let { TerminalHub.seekTo((it * duration).toLong()) }
                 dragging = null
+                onDragChange(false)
                 onInteract()
             },
             enabled = duration > 0,
@@ -371,8 +385,9 @@ private fun FullscreenControls(onExit: () -> Unit, modifier: Modifier) {
     val audioOn by TerminalHub.audioOn.collectAsState()
     var visible by remember { mutableStateOf(true) }
     var tick by remember { mutableIntStateOf(0) }
-    LaunchedEffect(visible, tick) {
-        if (visible) {
+    var dragging by remember { mutableStateOf(false) }
+    LaunchedEffect(visible, tick, dragging) {
+        if (visible && !dragging) {
             delay(AUTO_HIDE_MS)
             visible = false
         }
@@ -402,7 +417,7 @@ private fun FullscreenControls(onExit: () -> Unit, modifier: Modifier) {
                     CtrlBtn(Icons.Filled.SkipNext) { hit { TerminalHub.control("next") } }
                     CtrlBtn(Icons.Filled.Stop) { hit { TerminalHub.control("stop") } }
                 }
-                SeekBar(onInteract = { tick++ })
+                SeekBar(onInteract = { tick++ }, onDragChange = { dragging = it })
             }
         }
     }
