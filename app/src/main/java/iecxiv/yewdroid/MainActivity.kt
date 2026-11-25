@@ -68,6 +68,7 @@ import kotlinx.coroutines.delay
 private val BG = Color(0xFF0C0C0C)
 private val FG = Color(0xFFDCDFE4)
 private val ACCENT = Color(0xFF98C379)
+private const val AUTO_HIDE_MS = 3000L
 
 class MainActivity : ComponentActivity() {
     private var future: ListenableFuture<MediaController>? = null
@@ -192,16 +193,32 @@ fun TerminalScreen() {
         }
 
         if (showVideo) {
-            Box(Modifier.fillMaxWidth().background(Color.Black), contentAlignment = Alignment.Center) {
+            var overlay by remember { mutableStateOf(true) }
+            var tick by remember { mutableIntStateOf(0) }
+            LaunchedEffect(overlay, tick) {
+                if (overlay) {
+                    delay(AUTO_HIDE_MS)
+                    overlay = false
+                }
+            }
+            Box(
+                Modifier.fillMaxWidth().background(Color.Black).clickableNoRipple { overlay = !overlay },
+                contentAlignment = Alignment.Center
+            ) {
                 val ratio = videoAspect.coerceIn(1f, 2.4f)
                 VideoSurface(
                     if (landscape) Modifier.height(150.dp).aspectRatio(ratio)
                     else Modifier.fillMaxWidth().aspectRatio(ratio)
                 )
-                Box(Modifier.align(Alignment.TopEnd).background(Color(0x66000000))) {
-                    CtrlBtn(Icons.Filled.Fullscreen) { fullscreen = true }
+                if (overlay) {
+                    Box(Modifier.align(Alignment.TopEnd).background(Color(0x66000000))) {
+                        CtrlBtn(Icons.Filled.Fullscreen) { fullscreen = true }
+                    }
+                    SeekBar(
+                        Modifier.align(Alignment.BottomCenter).background(Color(0x66000000)),
+                        onInteract = { tick++ }
+                    )
                 }
-                SeekBar(Modifier.align(Alignment.BottomCenter).background(Color(0x66000000)))
             }
         }
 
@@ -319,7 +336,7 @@ private fun formatTime(ms: Long): String {
 }
 
 @Composable
-private fun SeekBar(modifier: Modifier = Modifier) {
+private fun SeekBar(modifier: Modifier = Modifier, onInteract: () -> Unit = {}) {
     val position by TerminalHub.positionMs.collectAsState()
     val duration by TerminalHub.durationMs.collectAsState()
     var dragging by remember { mutableStateOf<Float?>(null) }
@@ -328,10 +345,11 @@ private fun SeekBar(modifier: Modifier = Modifier) {
         Text(formatTime(position), style = label)
         Slider(
             value = dragging ?: if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f,
-            onValueChange = { dragging = it },
+            onValueChange = { dragging = it; onInteract() },
             onValueChangeFinished = {
                 dragging?.let { TerminalHub.seekTo((it * duration).toLong()) }
                 dragging = null
+                onInteract()
             },
             enabled = duration > 0,
             colors = SliderDefaults.colors(
@@ -352,6 +370,17 @@ private fun SeekBar(modifier: Modifier = Modifier) {
 private fun FullscreenControls(onExit: () -> Unit, modifier: Modifier) {
     val audioOn by TerminalHub.audioOn.collectAsState()
     var visible by remember { mutableStateOf(true) }
+    var tick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(visible, tick) {
+        if (visible) {
+            delay(AUTO_HIDE_MS)
+            visible = false
+        }
+    }
+    fun hit(action: () -> Unit) {
+        tick++
+        action()
+    }
     Box(modifier.clickableNoRipple { visible = !visible }) {
         if (visible) {
             Column(
@@ -359,21 +388,21 @@ private fun FullscreenControls(onExit: () -> Unit, modifier: Modifier) {
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    CtrlBtn(Icons.Filled.FullscreenExit) { onExit() }
+                    CtrlBtn(Icons.Filled.FullscreenExit) { hit(onExit) }
                 }
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    CtrlBtn(Icons.Filled.SkipPrevious) { TerminalHub.control("prev") }
-                    CtrlBtn(Icons.Filled.Replay10) { TerminalHub.control("seekb") }
-                    CtrlBtn(if (audioOn) Icons.Filled.Pause else Icons.Filled.PlayArrow) { TerminalHub.control("toggle") }
-                    CtrlBtn(Icons.Filled.Forward10) { TerminalHub.control("seekf") }
-                    CtrlBtn(Icons.Filled.SkipNext) { TerminalHub.control("next") }
-                    CtrlBtn(Icons.Filled.Stop) { TerminalHub.control("stop") }
+                    CtrlBtn(Icons.Filled.SkipPrevious) { hit { TerminalHub.control("prev") } }
+                    CtrlBtn(Icons.Filled.Replay10) { hit { TerminalHub.control("seekb") } }
+                    CtrlBtn(if (audioOn) Icons.Filled.Pause else Icons.Filled.PlayArrow) { hit { TerminalHub.control("toggle") } }
+                    CtrlBtn(Icons.Filled.Forward10) { hit { TerminalHub.control("seekf") } }
+                    CtrlBtn(Icons.Filled.SkipNext) { hit { TerminalHub.control("next") } }
+                    CtrlBtn(Icons.Filled.Stop) { hit { TerminalHub.control("stop") } }
                 }
-                SeekBar()
+                SeekBar(onInteract = { tick++ })
             }
         }
     }
