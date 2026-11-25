@@ -26,7 +26,7 @@ def _clean_basic_help(body):
 def install():
     from mps_youtube import config, g, helptext
     from mps_youtube.commands import Command, config as config_commands, lastfm
-    from android_encode import HELP as encode_help, install as install_encode
+    from android_encode import install as install_encode
     if getattr(g, "_android_features_installed", False):
         return
 
@@ -36,19 +36,21 @@ def install():
     def topics():
         result = []
         for name, title, body in original_topics():
+            if name == "encode":
+                result.append((name, title, body))
+                continue
             if name not in REMOVED:
                 if name == "basic":
                     body = _clean_basic_help(body)
                 body = "\n".join(line for line in body.split("\n")
                                  if not re.match(r"\s*set(?:\s|$)", ANSI.sub("", line)))
                 result.append((name, title, body))
-        result.append(("encode", "Perfiles originales de codificacion", encode_help))
         return result
 
     def get_help(choice=None):
         name = (choice or "").strip().lower()
-        if name in ("encode", "encoder", "encoders", "encoding", "mp3", "wma", "transcode", "transcoding"):
-            return encode_help
+        if name in ("encode", "encoder", "encoders", "encoding", "mp3", "wma", "format", "transcode", "transcoding"):
+            return original_help("encode")
         if name in REMOVED or name in HELP_ALIASES:
             return "Este apartado no esta disponible en la app Android.\nUsa help para ver las opciones disponibles."
         return original_help(choice)
