@@ -1,6 +1,7 @@
-"""Explicit format choice and yt-dlp best selectors; no silent codec fallback."""
+"""Explicit choice and best selectors with optional FFmpeg track merging."""
 import os
 import shutil
+import subprocess
 import tempfile
 
 
@@ -19,7 +20,20 @@ def can_mux(video, audio):
             and audio.get("ext") == "m4a" and str(audio.get("acodec", "")).startswith("mp4a"))
 
 
-def choose(rows, title):
+def ffmpeg_ready():
+    from android_ffmpeg import binaries
+    try:
+        paths = binaries()
+    except RuntimeError:
+        return False
+    for path in paths:
+        result = subprocess.run([path, "-version"], capture_output=True, text=True, timeout=15)
+        if result.returncode != 0:
+            raise RuntimeError("El binario FFmpeg empaquetado no arranca: " + os.path.basename(path))
+    return True
+
+
+def choose(rows, title, ffmpeg=False):
     from mps_youtube import g, screen
     lines = [title, "N  ID  Tipo  Extension  Calidad  Codec video / audio  Tamaño aprox."]
     for number, fmt in enumerate(rows, 1):
@@ -29,7 +43,8 @@ def choose(rows, title):
         lines.append("%d  %s  %s  %s  %s  %s / %s  %s" % (
             number, fmt.get("format_id"), kind(fmt), fmt.get("ext"), quality,
             fmt.get("vcodec"), fmt.get("acodec"), size))
-    lines += ["", "La union Android admite solo video MP4/H.264 + audio M4A/AAC.", "Enter cancela sin descargar."]
+    note = "FFmpeg: union a MKV sin recodificar; depende del soporte de la compilacion." if ffmpeg else "Sin FFmpeg: union solo MP4/H.264 + M4A/AAC."
+    lines += ["", note, "Enter cancela sin descargar."]
     g.content = "\n".join(lines)
     screen.update()
     while True:
@@ -41,19 +56,19 @@ def choose(rows, title):
         print("Seleccion fuera de rango.")
 
 
-def plan(ydl, info, mode):
+def plan(ydl, info, mode, ffmpeg=False):
     rows = [fmt for fmt in info.get("formats", []) if fmt.get("url")
             and not fmt.get("has_drm") and kind(fmt) != "otro"]
     if not rows:
         raise RuntimeError("No hay formatos descargables en esta extraccion")
     if mode in ("d", "dl", "download"):
-        selected = choose(rows, str(info.get("title") or info.get("id")))
+        selected = choose(rows, str(info.get("title") or info.get("id")), ffmpeg)
         if kind(selected) != "video":
             return [selected]
-        audio = [fmt for fmt in rows if kind(fmt) == "audio" and can_mux(selected, fmt)]
+        audio = [fmt for fmt in rows if kind(fmt) == "audio" and (ffmpeg or can_mux(selected, fmt))]
         if not audio:
-            raise RuntimeError("El video elegido no tiene una union compatible con el multiplexador Android; no se descargo nada")
-        return [selected, choose(audio, "Selecciona el audio para unir al video")]
+            raise RuntimeError("No hay audio compatible con el backend disponible; no se descargo nada")
+        return [selected, choose(audio, "Selecciona el audio para unir al video", ffmpeg)]
     selector = "ba" if mode.startswith("da") else "bv*+ba/b"
     selections = list(ydl.build_format_selector(selector)({"formats": rows, "incomplete_formats": False, "has_merged_format": any(kind(fmt) == "video+audio" for fmt in rows)}))
     if not selections:
@@ -62,8 +77,11 @@ def plan(ydl, info, mode):
     tracks = selected.get("requested_formats") or [selected]
     if mode.startswith("da") and any(kind(fmt) != "audio" for fmt in tracks):
         raise RuntimeError("El mejor formato no es exclusivamente de audio")
-    if len(tracks) > 1 and (len(tracks) != 2 or not can_mux(tracks[0], tracks[1])):
-        raise RuntimeError("El mejor video/audio elegido por yt-dlp no es compatible con la union Android (MP4/H.264 + M4A/AAC). No se descargo nada ni se eligio una calidad inferior")
+    if len(tracks) > 1:
+        if len(tracks) != 2 or kind(tracks[0]) != "video" or kind(tracks[1]) != "audio":
+            raise RuntimeError("Combinacion de pistas no admitida")
+        if not ffmpeg and not can_mux(tracks[0], tracks[1]):
+            raise RuntimeError("El mejor video/audio requiere FFmpeg. Sin FFmpeg solo se une MP4/H.264 + M4A/AAC; no se descargo nada ni se eligio una calidad inferior")
     return tracks
 
 
@@ -74,11 +92,12 @@ def download(ytid, folder, mode):
     options = {"quiet": True, "noplaylist": True, "postprocessors": [], "fixup": "never",
                "hls_prefer_native": True, "retries": 3, "fragment_retries": 3, "socket_timeout": 25}
     url = "https://www.youtube.com/watch?v=%s" % ytid
+    ffmpeg = False if mode.startswith("da") else ffmpeg_ready()
     with yt_dlp.YoutubeDL(options) as ydl:
         info = ydl.extract_info(url, download=False)
         if not info or info.get("is_live"):
             raise RuntimeError("No se admiten emisiones en directo o extracciones vacias")
-        tracks = plan(ydl, info, mode)
+        tracks = plan(ydl, info, mode, ffmpeg)
     os.makedirs(folder, exist_ok=True)
     work = tempfile.mkdtemp(prefix=".yewdroid-choice-", dir=folder)
     try:
@@ -114,12 +133,17 @@ def download(ytid, folder, mode):
             paths.append(path)
         output = paths[0]
         if len(paths) == 2:
-            from java import jclass
-            if not can_mux(tracks[0], tracks[1]):
-                raise RuntimeError("Pistas incompatibles con el multiplexador")
-            output = os.path.splitext(paths[0])[0] + "-con-audio.mp4"
+            extension = ".mkv" if ffmpeg else ".mp4"
+            output = os.path.splitext(paths[0])[0] + "-con-audio" + extension
             print("\n[descarga] Uniendo video y audio sin recodificar...")
-            jclass("iecxiv.yewdroid.Mp4Muxer").merge(paths[0], paths[1], output)
+            if ffmpeg:
+                from android_ffmpeg import merge
+                merge(paths[0], paths[1], output)
+            else:
+                from java import jclass
+                if not can_mux(tracks[0], tracks[1]):
+                    raise RuntimeError("Pistas incompatibles con el multiplexador")
+                jclass("iecxiv.yewdroid.Mp4Muxer").merge(paths[0], paths[1], output)
         if not os.path.isfile(output) or os.path.getsize(output) == 0:
             raise RuntimeError("Archivo final ausente o vacio")
         destination = _publish(output)
