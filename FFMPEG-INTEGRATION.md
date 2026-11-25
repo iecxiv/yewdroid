@@ -1,27 +1,34 @@
 # Perfiles originales de yewtube en Android
 
-encoder y encoders muestran la lista original mediante show_encs. set encoder N guarda la seleccion usando la configuracion de yewtube; set encoder default restablece None. El comando simplificado encode [N] se ha retirado. h encode o h encoder muestra ayuda.
+encoder/encoders muestran la lista original. set encoder N guarda la seleccion y set encoder default restablece None. encode [N] se ha retirado. h encoder o h encode muestra ayuda. Los perfiles y parametros se cargan del fichero transcode original sin sobrescribirlo.
 
-Los perfiles se leen de g.encoders, cargados por el inicializador original desde el fichero transcode. Se conservan sus nombres, parametros, bitrates, VBR y extensiones validas. No se sobrescribe un fichero transcode existente. ENCODER ya no se fuerza a cero al cargar la configuracion.
+Las descargas de una pista de audio aplican el perfil si admite su extension. None conserva el original; un perfil no aplicable lo conserva con aviso. DELETE_ORIGINAL=False conserva la entrada localmente, mientras que True permite eliminarla tras exportar correctamente. Los comandos de escritorio no relacionados permanecen desactivados.
 
-Las descargas de una pista exclusivamente de audio (da o una seleccion de audio en d) aplican el perfil seleccionado si admite su extension. None conserva el archivo original. Un perfil no aplicable conserva el original con aviso. El mejor audio se selecciona antes de convertir, sin reducir calidad por compatibilidad.
+## Fuentes multimedia fijadas
 
-Antes de descargar una pista que deba convertirse se comprueba que FFmpeg/ffprobe arrancan y que existe el codificador requerido. Se ejecutan los argumentos del perfil con listas, sin shell, sustituyendo ENCODER_PATH por el ejecutable Android y los marcadores IN/OUT/OUT.EXT por rutas locales. Solo se exporta el resultado terminado. Un error conserva archivos de trabajo. DELETE_ORIGINAL=False conserva el original localmente y muestra su ruta; True lo elimina solo tras exportar correctamente. No se reactiva la configuracion general de escritorio ni Last.fm.
+- FFmpeg 9.1: https://ffmpeg.org/releases/ffmpeg-9.1.tar.xz
+- LAME 3.100: https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz
+- libogg 1.3.6 y libvorbis 1.3.7: paquetes oficiales de downloads.xiph.org.
 
-## Compilacion
+Los SHA-256 estan fijados en tools/media-sources.lock.json. Para Xiph proceden de su pagina de descargas; el hash FFmpeg coincide con los indices de Fossies y Temno, y el de LAME con el inventario de Suprema y la copia de SourceForge. Ademas, el preparador verifica la firma de FFmpeg con la huella oficial FCF986EA15E6E293A5644F10B4322F04D67658D8. Es una seleccion inicial de fuentes, no una actualizacion automatica ni una compilacion nativa ya verificada.
+
+## Preparar y compilar
+
+Con Python 3.13 y GnuPG en el equipo Linux:
 
 ```sh
-export OGG_SOURCE=/ruta/a/libogg-extraido
-export VORBIS_SOURCE=/ruta/a/libvorbis-extraido
-gradle :app:assembleDebug \
-  -PenableFfmpeg=true \
-  -PffmpegSource=/ruta/a/ffmpeg-extraido \
-  -PlameSource=/ruta/a/lame-extraido \
-  -PffmpegNdk=/ruta/al/ndk
+python3 tools/prepare-media-sources.py
+source build/media-sources/verified/sources.env
+export ANDROID_NDK_HOME=/ruta/al/ndk
+gradle :app:assembleDebug -PenableFfmpeg=true
 ```
 
-Se necesitan fuentes con configure, Linux x86_64, NDK, make, Python 3 y pkg-config. El script exige libmp3lame, libvorbis, aac y wmav2 y sus contenedores; sin enable-gpl ni enable-nonfree. Las fuentes todavia deben fijarse y verificarse. Gradle solo incluye los binarios con enableFfmpeg=true. d/dv mantienen la union sin recodificar, con FFmpeg a MKV o con Mp4Muxer a MP4 compatible.
+El preparador descarga solo las versiones fijadas, exige hashes correctos, comprueba la firma FFmpeg, extrae con controles de rutas y genera FFMPEG_SOURCE, LAME_SOURCE, OGG_SOURCE y VORBIS_SOURCE. Conserva los paquetes originales, la firma, la clave publica y el archivo de bloqueo en build/media-sources/verified. No sobrescribe un directorio verified existente: conservarlo antes de repetir. No compila ni publica por si mismo.
 
-## Pendiente
+Gradle admite tambien ffmpegSource, lameSource y ffmpegNdk. enableFfmpeg=true es obligatorio para incluir los ejecutables. Se necesitan NDK Linux x86_64, make y pkg-config. El script exige libmp3lame, libvorbis, aac y wmav2 y los contenedores requeridos, sin enable-gpl ni enable-nonfree. d/dv unen sin recodificar; las descargas de audio convierten segun el perfil seleccionado.
 
-La sintaxis y la sustitucion de argumentos de los siete perfiles y sus extensiones se han probado con datos simulados. No se han validado la compilacion nativa, las conversiones de los siete perfiles, la carga/persistencia real ni la exportacion en Android. Verificar decodificadores, contenedores, ELF, permisos y alineacion 16 KB. Conservar fuentes completas, configuracion, parches, avisos y mecanismo de sustitucion o reenlace aplicable a LGPL. No se certifica aun equivalencia funcional completa ni cumplimiento completo de una APK.
+## Distribucion y validacion pendiente
+
+Los archivos bajo build/ no se publican automaticamente en GitHub. Incluir los paquetes fuente exactos, los scripts, configuracion, parches y avisos con cada distribucion que los utilice, ademas del mecanismo de sustitucion o reenlace aplicable a LGPL. Las copias de COPYING no certifican cumplimiento completo.
+
+Se han comprobado sintaxis y casos simulados de extraccion segura. No se han ejecutado las descargas reales, la verificacion GPG, la compilacion cruzada ni los siete perfiles en Android. Verificar persistencia, cancelacion, exportacion, codificadores/decodificadores, ELF y alineacion 16 KB. No se certifica aun una APK completamente funcional equivalente al original.
