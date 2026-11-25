@@ -1,10 +1,13 @@
 package iecxiv.yewdroid
 
 import android.Manifest
+import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.media.AudioManager
 import android.net.Uri
@@ -14,6 +17,7 @@ import android.os.PowerManager
 import android.provider.Settings
 import android.view.SurfaceView
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -32,6 +36,8 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -51,6 +57,9 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
@@ -132,6 +141,11 @@ fun TerminalScreen() {
     val videoOn by TerminalHub.videoOn.collectAsState()
     val videoAspect by TerminalHub.videoAspect.collectAsState()
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    var fullscreen by rememberSaveable { mutableStateOf(false) }
+    val showVideo = playing && videoOn
+    val isFull = fullscreen && showVideo
+    FullscreenEffect(isFull)
+    BackHandler(enabled = isFull) { fullscreen = false }
     var input by rememberSaveable { mutableStateOf("") }
     val history = savedHistory.orEmpty()
     var hIdx by remember { mutableIntStateOf(-1) }
@@ -160,6 +174,14 @@ fun TerminalScreen() {
         hIdx = -1
     }
 
+    if (isFull) {
+        Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+            VideoSurface(Modifier.aspectRatio(videoAspect.coerceAtLeast(0.2f)))
+            VideoControls(true, { fullscreen = false }, Modifier.fillMaxSize())
+        }
+        return
+    }
+
     Column(Modifier.fillMaxSize().background(BG).systemBarsPadding().imePadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("YewDroid", color = ACCENT, style = uiStyle, modifier = Modifier.weight(1f))
@@ -169,13 +191,14 @@ fun TerminalScreen() {
                 .clickableNoRipple { changeZoom(1f) }.padding(12.dp))
         }
 
-        if (playing && videoOn) {
+        if (showVideo) {
             Box(Modifier.fillMaxWidth().background(Color.Black), contentAlignment = Alignment.Center) {
                 val ratio = videoAspect.coerceIn(1f, 2.4f)
                 VideoSurface(
                     if (landscape) Modifier.height(150.dp).aspectRatio(ratio)
                     else Modifier.fillMaxWidth().aspectRatio(ratio)
                 )
+                VideoControls(false, { fullscreen = true }, Modifier.matchParentSize())
             }
         }
 
@@ -204,13 +227,15 @@ fun TerminalScreen() {
         if (playing) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
                 Text(now, color = ACCENT, style = uiStyle, maxLines = 1)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    CtrlBtn(Icons.Filled.SkipPrevious) { TerminalHub.control("prev") }
-                    CtrlBtn(Icons.Filled.Replay10) { TerminalHub.control("seekb") }
-                    CtrlBtn(if (audioOn) Icons.Filled.Pause else Icons.Filled.PlayArrow) { TerminalHub.control("toggle") }
-                    CtrlBtn(Icons.Filled.Forward10) { TerminalHub.control("seekf") }
-                    CtrlBtn(Icons.Filled.SkipNext) { TerminalHub.control("next") }
-                    CtrlBtn(Icons.Filled.Stop) { TerminalHub.control("stop") }
+                if (!videoOn) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                        CtrlBtn(Icons.Filled.SkipPrevious) { TerminalHub.control("prev") }
+                        CtrlBtn(Icons.Filled.Replay10) { TerminalHub.control("seekb") }
+                        CtrlBtn(if (audioOn) Icons.Filled.Pause else Icons.Filled.PlayArrow) { TerminalHub.control("toggle") }
+                        CtrlBtn(Icons.Filled.Forward10) { TerminalHub.control("seekf") }
+                        CtrlBtn(Icons.Filled.SkipNext) { TerminalHub.control("next") }
+                        CtrlBtn(Icons.Filled.Stop) { TerminalHub.control("stop") }
+                    }
                 }
             }
         } else {
@@ -249,6 +274,111 @@ fun TerminalScreen() {
                     }
                 }
                 CtrlBtn(Icons.AutoMirrored.Filled.Send) { submit() }
+            }
+        }
+    }
+}
+
+private fun Context.findActivity(): Activity? {
+    var current = this
+    while (current is ContextWrapper) {
+        if (current is Activity) return current
+        current = current.baseContext
+    }
+    return null
+}
+
+@Composable
+private fun FullscreenEffect(on: Boolean) {
+    val ctx = LocalContext.current
+    DisposableEffect(on) {
+        val activity = ctx.findActivity()
+        if (activity != null && on) {
+            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            val controller = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+        }
+        onDispose {
+            if (activity != null && on) {
+                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                WindowCompat.getInsetsController(activity.window, activity.window.decorView)
+                    .show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+    }
+}
+
+private fun formatTime(ms: Long): String {
+    val total = (ms / 1000).coerceAtLeast(0)
+    val h = total / 3600
+    val m = (total % 3600) / 60
+    val s = total % 60
+    return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
+}
+
+@Composable
+private fun VideoControls(fullscreen: Boolean, onFullscreen: () -> Unit, modifier: Modifier) {
+    val audioOn by TerminalHub.audioOn.collectAsState()
+    val position by TerminalHub.positionMs.collectAsState()
+    val duration by TerminalHub.durationMs.collectAsState()
+    var visible by remember { mutableStateOf(true) }
+    var touch by remember { mutableIntStateOf(0) }
+    var dragging by remember { mutableStateOf<Float?>(null) }
+    val label = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = Color.White)
+    LaunchedEffect(visible, touch, audioOn, dragging) {
+        if (visible && audioOn && dragging == null) {
+            delay(3000)
+            visible = false
+        }
+    }
+    Box(modifier.clickableNoRipple { visible = !visible; touch++ }) {
+        if (visible) {
+            Column(
+                Modifier.fillMaxSize().background(Color(0x88000000)),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    CtrlBtn(if (fullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen) {
+                        touch++
+                        onFullscreen()
+                    }
+                }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CtrlBtn(Icons.Filled.SkipPrevious) { touch++; TerminalHub.control("prev") }
+                    CtrlBtn(Icons.Filled.Replay10) { touch++; TerminalHub.control("seekb") }
+                    CtrlBtn(if (audioOn) Icons.Filled.Pause else Icons.Filled.PlayArrow) { touch++; TerminalHub.control("toggle") }
+                    CtrlBtn(Icons.Filled.Forward10) { touch++; TerminalHub.control("seekf") }
+                    CtrlBtn(Icons.Filled.SkipNext) { touch++; TerminalHub.control("next") }
+                    CtrlBtn(Icons.Filled.Stop) { touch++; TerminalHub.control("stop") }
+                }
+                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(formatTime(position), style = label)
+                    Slider(
+                        value = dragging ?: if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f,
+                        onValueChange = { dragging = it },
+                        onValueChangeFinished = {
+                            dragging?.let { TerminalHub.seekTo((it * duration).toLong()) }
+                            dragging = null
+                            touch++
+                        },
+                        enabled = duration > 0,
+                        colors = SliderDefaults.colors(
+                            thumbColor = ACCENT,
+                            activeTrackColor = ACCENT,
+                            inactiveTrackColor = Color(0x55FFFFFF),
+                            disabledThumbColor = Color(0x55FFFFFF),
+                            disabledActiveTrackColor = Color(0x55FFFFFF),
+                            disabledInactiveTrackColor = Color(0x33FFFFFF)
+                        ),
+                        modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
+                    )
+                    Text(formatTime(duration), style = label)
+                }
             }
         }
     }

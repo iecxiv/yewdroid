@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.SurfaceView
 import androidx.compose.ui.text.AnnotatedString
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
@@ -54,6 +55,8 @@ object TerminalHub {
     val nowPlaying = MutableStateFlow("")
     val videoOn = MutableStateFlow(false)
     val videoAspect = MutableStateFlow(16f / 9f)
+    val positionMs = MutableStateFlow(0L)
+    val durationMs = MutableStateFlow(0L)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val main = Handler(Looper.getMainLooper())
@@ -128,8 +131,12 @@ object TerminalHub {
         while (true) {
             delay(1000)
             if (playing.value) {
-                val pos = withContext(Dispatchers.Main) { exo?.currentPosition ?: 0L } / 1000
-                runCatching { py?.callAttr("progress", pos.toInt()) }
+                val (posMs, durMs) = withContext(Dispatchers.Main) {
+                    (exo?.currentPosition ?: 0L) to (exo?.duration ?: C.TIME_UNSET)
+                }
+                positionMs.value = posMs
+                durationMs.value = if (durMs == C.TIME_UNSET || durMs < 0) 0L else durMs
+                runCatching { py?.callAttr("progress", (posMs / 1000).toInt()) }
             }
         }
     }
@@ -150,6 +157,8 @@ object TerminalHub {
     fun onPlay(url: String, title: String, artist: String, thumb: String) {
         nowPlaying.value = title
         videoOn.value = nextVideo
+        positionMs.value = 0L
+        durationMs.value = 0L
         main.post {
             val p = exo
             if (p == null) {
@@ -169,6 +178,8 @@ object TerminalHub {
         playing.value = false
         nowPlaying.value = ""
         videoOn.value = false
+        positionMs.value = 0L
+        durationMs.value = 0L
         main.post { exo?.stop(); exo?.clearMediaItems() }
     }
 
@@ -184,6 +195,11 @@ object TerminalHub {
     fun interrupt() {
         if (playing.value) event("stop")
         else scope.launch { runCatching { py?.callAttr("interrupt") } }
+    }
+
+    fun seekTo(ms: Long) {
+        positionMs.value = ms
+        main.post { exo?.seekTo(ms) }
     }
 
     fun control(action: String) {
