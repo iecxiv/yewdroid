@@ -1,0 +1,99 @@
+name: Incorporate distribution sources and licenses
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/incorporate-distribution.yml]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: incorporate-distribution
+  cancel-in-progress: false
+jobs:
+  incorporate:
+    if: github.repository == 'iecxiv/yewtube-android'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Incorporate full texts and source snapshots without building an APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin https://github.com/iecxiv/yewtube-android.git
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          echo "::add-mask::$auth"
+          git -c http.extraheader="AUTHORIZATION: basic $auth" fetch origin main
+          test "$(git rev-parse FETCH_HEAD)" = "$TARGET_SHA"
+          git checkout -b main FETCH_HEAD
+          mkdir -p legal/licenses app/src/main/assets/licenses distribution
+          while read -r name repo sha; do
+            gh api "repos/$repo/git/blobs/$sha" --jq '.content' | base64 -d > "legal/licenses/$name"
+            actual="$(git hash-object "legal/licenses/$name")"
+            test "$actual" = "$sha"
+          done <<'SOURCES'
+          GPL-3.0.txt mps-youtube/yewtube d052dd4166f1c6560a96cb39302034b2f91236ad
+          yewtube-CONTRIBUTORS.txt mps-youtube/yewtube cdf3f35aad7ecef9b17bf9717cf475e47f96db41
+          yt-dlp-Unlicense.txt yt-dlp/yt-dlp 68a49daad8ff7e35068f2b7a97d643aab440eaec
+          yt-dlp-ejs-Unlicense.txt yt-dlp/ejs efb98088164f5786b17e83ed384971fc3c74f93c
+          astring-MIT.txt davidbonnet/astring 4714dd6f96e1fbdb0dc21b86032c665408a49741
+          meriyah-ISC.txt meriyah/meriyah 86e8894ecbb46836357e193e2fc3c0080471d184
+          Chaquopy-MIT.txt chaquo/chaquopy 47bf27a5b5af7ddb51429269b39e4132d9b9845c
+          QuickJS-NG-MIT.txt quickjs-ng/quickjs fae657320cdf957cab10654ac39990fdb20e97ef
+          CPython-3.13-LICENSE.txt python/cpython 14603b95c2e23b5a4cd6ff93f50348d1817f7638
+          Media3-Apache-2.0.txt androidx/media d645695673349e3947e8e5ae42332d0ac3164cd7
+          Coroutines-Apache-2.0.txt Kotlin/kotlinx.coroutines 9c308d958bf91eafe83f66106ca692ff414a4965
+          Coroutines-NOTICE.txt Kotlin/kotlinx.coroutines 01d81385e4ace2e64601668ea7021ca27cdbe376
+          SOURCES
+          test "$(wc -c < legal/licenses/GPL-3.0.txt)" -gt 30000
+          grep -q 'END OF TERMS AND CONDITIONS' legal/licenses/GPL-3.0.txt
+          cp legal/licenses/GPL-3.0.txt LICENSE
+          upstream="$(mktemp -d)"
+          git -C "$upstream" init
+          git -C "$upstream" remote add origin https://github.com/mps-youtube/yewtube.git
+          git -C "$upstream" fetch --depth=1 origin 35989588eb1270d55bbced991ea2edf3a11064da
+          test "$(git -C "$upstream" rev-parse FETCH_HEAD)" = 35989588eb1270d55bbced991ea2edf3a11064da
+          git -C "$upstream" archive --format=tar.gz FETCH_HEAD > distribution/yewtube-sources-3598958.tar.gz
+          git archive --format=tar.gz 01cd1dd6c95720fb5014626de47ec15f19aa45b6 -- . ':!errors' > distribution/yewdroid-sources-01cd1dd.tar.gz
+          rm -rf "$upstream"
+          cat > THIRD_PARTY_NOTICES.md <<'NOTICES'
+          # Avisos de terceros / Third-party notices
+
+          Los textos originales completos y los avisos de derechos se conservan en legal/licenses/ y en assets/licenses/ de las futuras APKs. Cada componente conserva su licencia original. Se incluye la lista de colaboradores de yewtube y el NOTICE de Coroutines; astring y meriyah forman parte de yt-dlp-ejs. La licencia de Python es la copia revisada de la rama 3.13, no una verificación del parche de runtime empaquetado.
+
+          Original complete license texts and copyright notices are preserved in legal/licenses/ and future APK assets/licenses/. Each component retains its original license. The yewtube contributor list and Coroutines NOTICE are included; astring and meriyah are incorporated into yt-dlp-ejs. The Python license is the reviewed 3.13-branch copy, not verification of the packaged runtime patch.
+
+          Esta colección no es un inventario completo de una APK. Revisar los avisos y fuentes exigidos por las dependencias transitivas, bibliotecas nativas y runtime realmente distribuidos. Consultar SOURCE_OFFER.md.
+
+          This collection is not a complete APK inventory. Review notices and required sources for actual transitive dependencies, native libraries and runtime. See SOURCE_OFFER.md.
+          NOTICES
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          rows = []
+          for path in sorted(Path('legal/licenses').glob('*.txt')):
+              rows.append({'file': path.name, 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()})
+          data = {'scope': 'legal text inventory; not resolved APK components', 'texts': rows}
+          Path('legal/licenses/manifest.json').write_text(json.dumps(data, indent=2) + '\n')
+          sources = []
+          for path in sorted(Path('distribution').glob('*-sources-*.tar.gz')):
+              sources.append({'file': path.name, 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()})
+          Path('distribution/manifest.json').write_text(json.dumps({'sources': sources, 'yewtube_commit': '35989588eb1270d55bbced991ea2edf3a11064da', 'app_commit': '01cd1dd6c95720fb5014626de47ec15f19aa45b6', 'binary_inspected': False, 'complete_corresponding_source_certified': False}, indent=2) + '\n')
+          section = '\n\n## Materiales incorporados / Included materials\n\nTextos completos: LICENSE y legal/licenses/. Avisos: THIRD_PARTY_NOTICES.md. Copias de fuentes: distribution/yewtube-sources-3598958.tar.gz y distribution/yewdroid-sources-01cd1dd.tar.gz. La copia de YewDroid incluye adaptadores y scripts del commit de referencia; excluye los registros de errors/. Los manifiestos registran SHA-256. Estos archivos no actualizan dependencias ni demuestran correspondencia con una APK. La revision completa de transitivas, fuentes y modificaciones requeridas, runtime y reconstruccion sigue pendiente.\n\nComplete texts: LICENSE and legal/licenses/. Notices: THIRD_PARTY_NOTICES.md. Source snapshots and SHA-256 manifests: distribution/. The app snapshot includes adapters and scripts, excluding error logs. Dependencies are unchanged. Binary correspondence, full required transitive sources and modifications, runtime review and reconstruction validation remain pending.\n'
+          path = Path('SOURCE_OFFER.md')
+          text = path.read_text()
+          text = text.replace('Este documento facilita las referencias de las fuentes; no incorpora sus archivos ni los textos completos de las licencias. La incorporación de esos materiales, la revisión de los demás componentes GPL/LGPL, las dependencias transitivas y bibliotecas nativas, y la validación de la reconstrucción siguen pendientes.', 'Las copias de fuentes y los textos completos incorporados se detallan al final de este documento. La revisión de los demás componentes GPL/LGPL, las dependencias transitivas y bibliotecas nativas, y la validación de la reconstrucción siguen pendientes.')
+          text = text.replace('This document provides source references, not vendored source files or complete license texts. Incorporating those materials, reviewing other GPL/LGPL components, transitive dependencies and native libraries, and validating reconstruction remain pending.', 'Included source snapshots and complete legal texts are listed below. Review of other GPL/LGPL components, transitive dependencies and native libraries, and reconstruction validation remain pending.')
+          marker = '\n\n## Materiales incorporados / Included materials'
+          path.write_text(text.split(marker)[0] + section)
+          PY
+          cp legal/licenses/* app/src/main/assets/licenses/
+          cp THIRD_PARTY_NOTICES.md app/src/main/assets/licenses/
+          git add LICENSE SOURCE_OFFER.md THIRD_PARTY_NOTICES.md legal/licenses app/src/main/assets/licenses distribution
+          git diff --cached --check -- SOURCE_OFFER.md THIRD_PARTY_NOTICES.md
+          if git diff --cached --quiet; then exit 0; fi
+          git -c user.name='github-actions[bot]' -c user.email='github-actions[bot]@users.noreply.github.com' commit -m 'legal: incorporate complete license texts and upstream source snapshots'
+          git -c http.extraheader="AUTHORIZATION: basic $auth" push origin HEAD:main
