@@ -14,6 +14,19 @@ HELP_ALIASES = frozenset((
     "lastfm_connect"
 ).split())
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
+TOPIC_LINE = re.compile(r"^((?:\x1b\[[0-9;]*m)? {5})(\S+) *((?:\x1b\[[0-9;]*m)?) : (.*)$", re.MULTILINE)
+
+
+def _align_topics(text):
+    if not isinstance(text, str) or "Help Topics" not in text:
+        return text
+    found = TOPIC_LINE.findall(text)
+    if not found:
+        return text
+    width = max(len(item[1]) for item in found)
+    return TOPIC_LINE.sub(
+        lambda m: "%s%s%s%s : %s" % (m.group(1), m.group(2), " " * (width - len(m.group(2))),
+                                     m.group(3), m.group(4)), text)
 
 
 def _clean_basic_help(body):
@@ -66,7 +79,7 @@ def install():
             return original_help("encode")
         if name in REMOVED or name in HELP_ALIASES:
             return "This section is not available in the Android app.\nUse help to see the available options."
-        return original_help(choice)
+        return _align_topics(original_help(choice))
 
     for name, module in tuple(sys.modules.items()):
         if name.startswith("mps_youtube.") and module is not None:
