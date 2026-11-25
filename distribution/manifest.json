@@ -1,0 +1,16 @@
+{
+  "sources": [
+    {
+      "file": "yewdroid-sources-01cd1dd.tar.gz",
+      "sha256": "1b49d32ac06e0455d1a0bd470dd8c5a3b168ceec9397e689df7606b494ba6e18"
+    },
+    {
+      "file": "yewtube-sources-3598958.tar.gz",
+      "sha256": "2e6e142ee33587b2a889b5fa47a962c7c384c73154a6caad39b0c5ad86bcacd1"
+    }
+  ],
+  "yewtube_commit": "35989588eb1270d55bbced991ea2edf3a11064da",
+  "app_commit": "01cd1dd6c95720fb5014626de47ec15f19aa45b6",
+  "binary_inspected": false,
+  "complete_corresponding_source_certified": false
+}

@@ -21,7 +21,7 @@ El material de distribución debe reunir las fuentes originales de yewtube, sus 
 
 ### Alcance y estado
 
-Este documento facilita las referencias de las fuentes; no incorpora sus archivos ni los textos completos de las licencias. La incorporación de esos materiales, la revisión de los demás componentes GPL/LGPL, las dependencias transitivas y bibliotecas nativas, y la validación de la reconstrucción siguen pendientes. No se ha inspeccionado una APK ni se certifica la correspondencia entre estos commits y un binario.
+Las copias de fuentes y los textos completos incorporados se detallan al final de este documento. La revisión de los demás componentes GPL/LGPL, las dependencias transitivas y bibliotecas nativas, y la validación de la reconstrucción siguen pendientes. No se ha inspeccionado una APK ni se certifica la correspondencia entre estos commits y un binario.
 
 Las instrucciones disponibles están en README.md, app/build.gradle.kts y tools/build-quickjs-android.sh del commit de referencia. Antes de afirmar una reconstrucción validada, deben registrarse las versiones exactas de herramientas y dependencias y completarse el wrapper Gradle o documentarse el Gradle externo utilizado.
 
@@ -35,8 +35,15 @@ YewDroid uses the current upstream sources from `mps-youtube/yewtube` as its ref
 
 The YewDroid archive linked above contains the Android code, Python adapters, modifications and build scripts from reference commit `01cd1dd6c95720fb5014626de47ec15f19aa45b6`. Distribution materials must bring together the original yewtube sources and notices, YewDroid sources and modifications, and the required build scripts and instructions.
 
-This document provides source references, not vendored source files or complete license texts. Incorporating those materials, reviewing other GPL/LGPL components, transitive dependencies and native libraries, and validating reconstruction remain pending. No APK has been inspected and binary correspondence is not certified.
+Included source snapshots and complete legal texts are listed below. Review of other GPL/LGPL components, transitive dependencies and native libraries, and reconstruction validation remain pending. No APK has been inspected and binary correspondence is not certified.
 
 Consult the referenced README and build scripts. Record exact tool and dependency versions and complete the Gradle wrapper or document the external Gradle used before claiming a validated reconstruction.
 
 Only yt-dlp is updated while compatible with the existing dependencies. yewtube, yt-dlp-ejs, QuickJS and other components remain unchanged; additional updates are reviewed separately. This documentation change does not modify dependencies or build or publish an APK.
+
+
+## Materiales incorporados / Included materials
+
+Textos completos: LICENSE y legal/licenses/. Avisos: THIRD_PARTY_NOTICES.md. Copias de fuentes: distribution/yewtube-sources-3598958.tar.gz y distribution/yewdroid-sources-01cd1dd.tar.gz. La copia de YewDroid incluye adaptadores y scripts del commit de referencia; excluye los registros de errors/. Los manifiestos registran SHA-256. Estos archivos no actualizan dependencias ni demuestran correspondencia con una APK. La revision completa de transitivas, fuentes y modificaciones requeridas, runtime y reconstruccion sigue pendiente.
+
+Complete texts: LICENSE and legal/licenses/. Notices: THIRD_PARTY_NOTICES.md. Source snapshots and SHA-256 manifests: distribution/. The app snapshot includes adapters and scripts, excluding error logs. Dependencies are unchanged. Binary correspondence, full required transitive sources and modifications, runtime review and reconstruction validation remain pending.
