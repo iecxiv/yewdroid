@@ -23,8 +23,16 @@ def _clean_basic_help(body):
         "", body, flags=re.MULTILINE | re.DOTALL)
 
 
+def _add_editor_hint(body, path, colors):
+    marker = "       " + path
+    if body.count(marker) != 1 or "edit encoders" in ANSI.sub("", body):
+        return body
+    hint = "You can also edit them within the app by entering %sedit encoders%s." % (colors.y, colors.w)
+    return body.replace(marker, marker + "\n\n    " + hint, 1)
+
+
 def install():
-    from mps_youtube import config, g, helptext
+    from mps_youtube import c, config, g, helptext
     from mps_youtube.commands import Command, config as config_commands, lastfm
     from android_encode import install as install_encode
     from android_encoder_editor import install as install_editor
@@ -39,7 +47,7 @@ def install():
         result = []
         for name, title, body in original_topics():
             if name == "encode":
-                result.append((name, title, body))
+                result.append((name, title, _add_editor_hint(body, g.TCFILE, c)))
                 continue
             if name not in REMOVED:
                 if name == "basic":
