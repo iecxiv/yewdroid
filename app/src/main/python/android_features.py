@@ -3,6 +3,7 @@ import re
 import sys
 
 REMOVED = frozenset("dl-command encode invoke config lastfm tips new changelog tor".split())
+CONFIG_ALIASES = frozenset("config set showconfig configuration configure settings columns audio default reset".split())
 HELP_ALIASES = frozenset((
     "dlcmd dl-cmd download-cmd dl_cmd download_cmd download-command download_command "
     "encoding transcoding transcode wma mp3 format encoder encoders "
@@ -47,6 +48,7 @@ def _add_editor_hint(body, path, colors):
 def install():
     from mps_youtube import c, config, g, helptext
     from mps_youtube.commands import Command, config as config_commands, lastfm
+    from android_config import install as install_config, help_topic as config_help
     from android_encode import install as install_encode
     from android_encoder_editor import install as install_editor
     from android_encoder_defaults import help_topic as editor_help
@@ -68,6 +70,7 @@ def install():
                 body = "\n".join(line for line in body.split("\n")
                                  if not re.match(r"\s*set(?:\s|$)", ANSI.sub("", line)))
                 result.append((name, title, body))
+        result.append(config_help())
         result.append(editor_help())
         return result
 
@@ -75,6 +78,8 @@ def install():
         name = (choice or "").strip().lower()
         if name in ("edit-encoders", "edit_encoders", "edit encoders"):
             return original_help("edit-encoders")
+        if name in CONFIG_ALIASES:
+            return original_help("config")
         if name in ("encode", "encoder", "encoders", "encoding", "mp3", "wma", "format", "transcode", "transcoding"):
             return original_help("encode")
         if name in REMOVED or name in HELP_ALIASES:
@@ -128,6 +133,7 @@ def install():
 
     config.load = load
     enforce()
+    install_config()
     install_encode()
     install_editor()
     g._android_features_installed = True
