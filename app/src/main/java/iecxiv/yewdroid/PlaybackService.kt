@@ -1,5 +1,6 @@
 package iecxiv.yewdroid
 
+import android.app.PendingIntent
 import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -50,7 +51,17 @@ class PlaybackService : MediaSessionService() {
             }
         })
         TerminalHub.registerPlayer(player)
-        session = MediaSession.Builder(this, NavPlayer(player)).build()
+        val activityIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        val sessionActivity = PendingIntent.getActivity(
+            this, 0, activityIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        session = MediaSession.Builder(this, NavPlayer(player))
+            .setSessionActivity(sessionActivity)
+            .build()
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = session
