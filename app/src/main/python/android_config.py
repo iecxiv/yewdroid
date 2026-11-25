@@ -1,7 +1,8 @@
 """Expose only the yewtube settings that have an effect in the Android app."""
 import re
 
-ALLOWED = ("AUDIO_FORMAT", "ALWAYS_REPEAT", "COLUMNS", "HISTORY", "SHOW_VIDEO", "MAX_RES", "VIDEO_FORMAT")
+ALLOWED = ("AUDIO_FORMAT", "ALWAYS_REPEAT", "COLUMNS", "HISTORY", "SHOW_VIDEO", "MAX_RES", "VIDEO_FORMAT",
+           "SEARCH_MUSIC", "ORDER", "USER_ORDER")
 SHOWN = ("ENCODER",) + ALLOWED
 DEFAULTS = {"SHOW_VIDEO": False}
 
@@ -26,6 +27,10 @@ def help_topic():
     {2}set show_video true|false{1} - show the video above the terminal (audio only if false)
     {2}set max_res <360-2160>{1} - maximum video height to play, e.g. 360 or 720
     {2}set video_format <auto|mp4|webm|3gp>{1} - preferred video format for playback
+    {2}set search_music true|false{1} - search only the music category (all categories if false)
+    {2}set order <relevance|date|views|rating>{1} - search result ordering
+    {2}set user_order <relevance|date|views|rating>{1} - user upload list ordering,
+         leave blank to use the same as order
 
     Use {2}1{1} and {2}0{1} in place of true and false.
     Add {2}-a{1} or {2}-w{1} after a selection to play it only this time as audio or with video,

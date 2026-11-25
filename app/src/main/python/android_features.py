@@ -3,7 +3,10 @@ import re
 import sys
 
 REMOVED = frozenset("dl-command encode invoke config lastfm tips new changelog tor".split())
-CONFIG_ALIASES = frozenset("config set showconfig configuration configure settings columns audio default reset max_res video_format quality resolution".split())
+CONFIG_ALIASES = frozenset((
+    "config set showconfig configuration configure settings columns audio default reset "
+    "max_res video_format quality resolution search_music order user_order"
+).split())
 HELP_ALIASES = frozenset((
     "dlcmd dl-cmd download-cmd dl_cmd download_cmd download-command download_command "
     "encoding transcoding transcode wma mp3 format encoder encoders "
