@@ -7,8 +7,10 @@ import android.graphics.Typeface
 import android.os.Bundle
 import android.text.InputFilter
 import android.text.InputType
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.EditText
@@ -26,7 +28,9 @@ import java.util.concurrent.Executors
 class EncoderEditorActivity : ComponentActivity() {
     private lateinit var editor: EditText
     private lateinit var status: TextView
-    private lateinit var actions: LinearLayout
+    private lateinit var headerActions: LinearLayout
+    private lateinit var bottomActions: LinearLayout
+    private lateinit var bottomRow: LinearLayout
     private lateinit var save: Button
     private lateinit var restore: Button
     private lateinit var cancel: Button
@@ -34,6 +38,10 @@ class EncoderEditorActivity : ComponentActivity() {
     private var baseline = ""
     private var hash = ""
     private var busy = true
+    private var normalTextPx = 0f
+    private var normalMinHeight = 0
+    private var normalMinWidth = 0
+    private var normalPadding = IntArray(4)
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
@@ -49,7 +57,14 @@ class EncoderEditorActivity : ComponentActivity() {
             view.setPadding(padding + bars.left, padding + bars.top, padding + bars.right, padding + maxOf(bars.bottom, ime.bottom))
             insets
         }
-        root.addView(TextView(this).apply { text = "Encoding presets"; textSize = 20f; setTextColor(Color.rgb(152, 195, 121)) })
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        header.addView(TextView(this).apply { text = "Encoding presets"; textSize = 20f; setTextColor(Color.rgb(152, 195, 121)) }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        headerActions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        header.addView(headerActions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        root.addView(header)
         status = TextView(this).apply { text = "Loading..."; setTextColor(Color.LTGRAY) }
         root.addView(status)
         editor = EditText(this).apply {
@@ -68,13 +83,14 @@ class EncoderEditorActivity : ComponentActivity() {
         save = Button(this).apply { text = "Save & Close"; isEnabled = false; setOnClickListener { saveDocument() } }
         restore = Button(this).apply { text = "Restore defaults"; isEnabled = false; setOnClickListener { confirmRestore() } }
         cancel = Button(this).apply { text = "Cancel"; setOnClickListener { closeEditor() } }
-        actions = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val buttons = LinearLayout(this)
-        buttons.addView(save, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        buttons.addView(cancel, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        actions.addView(buttons)
-        actions.addView(restore, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        root.addView(actions)
+        normalTextPx = save.textSize
+        normalMinHeight = save.minHeight
+        normalMinWidth = save.minWidth
+        normalPadding = intArrayOf(save.paddingLeft, save.paddingTop, save.paddingRight, save.paddingBottom)
+        bottomActions = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        bottomRow = LinearLayout(this)
+        bottomActions.addView(bottomRow)
+        root.addView(bottomActions)
         updateActions(resources.configuration.orientation)
         setContentView(root)
         ViewCompat.requestApplyInsets(root)
@@ -97,7 +113,37 @@ class EncoderEditorActivity : ComponentActivity() {
     }
 
     private fun updateActions(orientation: Int) {
-        actions.visibility = if (orientation == Configuration.ORIENTATION_LANDSCAPE) View.GONE else View.VISIBLE
+        val density = resources.displayMetrics.density
+        val buttons = listOf(save, cancel, restore)
+        buttons.forEach { (it.parent as? ViewGroup)?.removeView(it) }
+        if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            val height = (28 * density).toInt()
+            val gap = (4 * density).toInt()
+            val side = (8 * density).toInt()
+            buttons.forEach { button ->
+                button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                button.minHeight = 0
+                button.minimumHeight = 0
+                button.minWidth = 0
+                button.minimumWidth = 0
+                button.setPadding(side, 0, side, 0)
+                headerActions.addView(button, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, height).apply { marginStart = gap })
+            }
+            bottomActions.visibility = View.GONE
+        } else {
+            buttons.forEach { button ->
+                button.setTextSize(TypedValue.COMPLEX_UNIT_PX, normalTextPx)
+                button.minHeight = normalMinHeight
+                button.minimumHeight = normalMinHeight
+                button.minWidth = normalMinWidth
+                button.minimumWidth = normalMinWidth
+                button.setPadding(normalPadding[0], normalPadding[1], normalPadding[2], normalPadding[3])
+            }
+            bottomRow.addView(save, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            bottomRow.addView(cancel, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            bottomActions.addView(restore, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            bottomActions.visibility = View.VISIBLE
+        }
     }
 
     private fun callPython(module: String, method: String, vararg args: Any): JSONObject =
