@@ -27,8 +27,8 @@ def help_topic():
     {2}set show_video true|false{1} - show the video above the terminal (audio only if false)
     {2}set max_res <360-2160>{1} - maximum video height to play, e.g. 360 or 720
     {2}set video_format <auto|mp4|webm|3gp>{1} - preferred video format for playback
-    {2}set order <relevance|date|views|title>{1} - order the search results shown
-         (applied to the loaded results; rating keeps the original order)
+    {2}set order <relevance|date|views|title>{1} - sort the loaded search results
+         (date is approximate; rating is not available)
 
     Use {2}1{1} and {2}0{1} in place of true and false.
     Add {2}-a{1} or {2}-w{1} after a selection to play it only this time as audio or with video,

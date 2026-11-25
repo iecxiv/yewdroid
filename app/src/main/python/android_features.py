@@ -55,7 +55,7 @@ def install():
     from android_encode import install as install_encode
     from android_encoder_editor import install as install_editor
     from android_encoder_defaults import help_topic as editor_help
-    from android_search import install as install_search
+    from android_search_order import install as install_search_order
     if getattr(g, "_android_features_installed", False):
         return
 
@@ -140,5 +140,5 @@ def install():
     install_config()
     install_encode()
     install_editor()
-    install_search()
+    install_search_order()
     g._android_features_installed = True
