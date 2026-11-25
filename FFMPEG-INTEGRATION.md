@@ -1,10 +1,18 @@
-# Integración de FFmpeg + LAME en YewDroid
+# Integración de FFmpeg en YewDroid
 
-Gradle admite compilar y empaquetar FFmpeg opcionalmente. d/dv lo usan para unir pistas cuando está disponible; encode [N] ofrece conversión explícita a MP3. La compilación y ejecución Android siguen sin validar.
+## Estado
 
-## Compilar con FFmpeg
+Gradle permite compilar y empaquetar FFmpeg opcionalmente; d/dv usan el backend para unir pistas si está incluido. El script exige ahora los componentes de los siete perfiles originales de yewtube. La compilación y ejecución Android no están validadas.
+
+El menú conectado todavía es encode [N], limitado a MP3 explícito. La restauración de encoder/encoders y set encoder N, la selección persistente y su aplicación a da siguen pendientes. Hasta completar esa restauración, da conserva el audio original sin conversión.
+
+## Requisitos y compilación
+
+Se necesitan Linux x86_64, NDK, make, Python 3, pkg-config y paquetes fuente extraídos de FFmpeg, LAME, libogg y libvorbis con configure ejecutable. Las versiones y SHA-256 aún deben seleccionarse y verificarse; no se descargan automáticamente.
 
 ```sh
+export OGG_SOURCE=/ruta/a/libogg-extraido
+export VORBIS_SOURCE=/ruta/a/libvorbis-extraido
 gradle :app:assembleDebug \
   -PenableFfmpeg=true \
   -PffmpegSource=/ruta/a/ffmpeg-extraido \
@@ -12,23 +20,22 @@ gradle :app:assembleDebug \
   -PffmpegNdk=/ruta/al/ndk
 ```
 
-FFMPEG_SOURCE, LAME_SOURCE y ANDROID_NDK_HOME son alternativas a las propiedades de ruta. enableFfmpeg sigue siendo obligatorio. Se requieren fuentes con configure, Linux x86_64, make, Python 3 y NDK. Las fuentes todavía no están fijadas ni verificadas y no se descargan automáticamente.
+FFMPEG_SOURCE, LAME_SOURCE y ANDROID_NDK_HOME son alternativas a las propiedades Gradle. OGG_SOURCE y VORBIS_SOURCE se heredan del entorno del proceso Gradle. Usar rutas absolutas para esas dos variables. enableFfmpeg es obligatorio para empaquetar los binarios; sin él se conserva la compilación base.
 
-El script genera arm64-v8a y x86_64, API 26, con libmp3lame, sin enable-gpl ni enable-nonfree y sin red. Gradle conserva libffmpeg.so/libffprobe.so y añade los assets legales. Verificar extracción, permisos, ELF y alineación 16 KB.
+## Componentes exigidos
 
-## Descargas y conversión
+- libmp3lame: MP3 256k, MP3 192k, MP3 VBR best y MP3 VBR good.
+- libvorbis y libogg: OGG 256k.
+- aac nativo: M4A 256k.
+- wmav2 nativo: Windows Media Audio v2.
+- Contenedores MP3, OGG, ipod/M4A, ASF/WMA y Matroska.
 
-- d muestra formatos y permite seleccionar audio para unir al vídeo.
-- dv usa bv*+ba/b sin degradar silenciosamente la calidad. Con FFmpeg une a MKV sin recodificar; sin él mantiene Mp4Muxer para H.264/AAC compatibles.
-- da usa ba y conserva el audio original. No convierte a MP3 automáticamente.
-- encode o encode N abre el menú Android: selecciona vídeo de la lista actual y bitrate MP3 de 128, 192, 256 o 320 kbps. Enter cancela antes de descargar.
-- encode comprueba que ffmpeg/ffprobe arrancan y que libmp3lame está disponible antes de descargar el mejor audio. Convierte y exporta únicamente el MP3 terminado. Un error conserva los archivos de trabajo.
-- encode no convierte archivos ya descargados, no admite playlists ni rangos y no configura conversiones automáticas. h encode muestra su ayuda.
+El script compila bibliotecas estáticas para arm64-v8a y x86_64, API 26. pkg-config solo busca las bibliotecas del prefijo de cada ABI, evitando bibliotecas del host. Comprueba las macros de configuración y falla si faltan componentes, sin enable-gpl ni enable-nonfree. Estas comprobaciones no equivalen a ejecutar los siete perfiles.
 
-El encode de escritorio y ENCODER automático siguen desactivados; se registra un comando Android independiente. Se usa android_ffmpeg.py explícitamente, no ffmpeg_location. No se promete soporte universal de formatos.
+Copia los avisos de FFmpeg, LAME, libogg y libvorbis a los assets generados. Conserva configuración y hashes de los binarios. FFmpeg tiene la red deshabilitada; yt-dlp descarga antes de procesar.
 
 ## Validación pendiente
 
-Seleccionar fuentes versionadas, compilar, comprobar binarios y códecs en dispositivo, probar d/dv/da/encode, cancelación y exportación. La sintaxis y pruebas simuladas del menú se han comprobado, pero no la compilación Android. Conservar fuentes completas, configuración, parches, avisos y mecanismo de sustitución o reenlace aplicable a LGPL. Las copias de COPYING no certifican cumplimiento completo.
+Fijar las fuentes, validar compilación cruzada y probar en Android los cuatro codificadores, todos los perfiles, contenedores, decodificadores necesarios, extracción/permisos de ejecutables, ELF y alineación 16 KB. Probar selección, cancelación, persistencia, descarga y exportación. La sintaxis del script se ha comprobado; no se ha ejecutado la compilación nativa.
 
-No se actualizan dependencias existentes ni se convierte da automáticamente.
+Conservar fuentes completas, configuración, parches, avisos y mecanismo de sustitución o reenlace aplicable a LGPL. Las copias de COPYING no certifican cumplimiento completo. No se actualizan dependencias existentes ni se certifica todavía equivalencia funcional con la app original.
