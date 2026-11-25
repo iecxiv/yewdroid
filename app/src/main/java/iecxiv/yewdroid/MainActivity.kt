@@ -201,6 +201,7 @@ fun TerminalScreen() {
                 Box(Modifier.align(Alignment.TopEnd).background(Color(0x66000000))) {
                     CtrlBtn(Icons.Filled.Fullscreen) { fullscreen = true }
                 }
+                SeekBar(Modifier.align(Alignment.BottomCenter).background(Color(0x66000000)))
             }
         }
 
@@ -318,13 +319,39 @@ private fun formatTime(ms: Long): String {
 }
 
 @Composable
-private fun FullscreenControls(onExit: () -> Unit, modifier: Modifier) {
-    val audioOn by TerminalHub.audioOn.collectAsState()
+private fun SeekBar(modifier: Modifier = Modifier) {
     val position by TerminalHub.positionMs.collectAsState()
     val duration by TerminalHub.durationMs.collectAsState()
-    var visible by remember { mutableStateOf(true) }
     var dragging by remember { mutableStateOf<Float?>(null) }
     val label = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = Color.White)
+    Row(modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(formatTime(position), style = label)
+        Slider(
+            value = dragging ?: if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f,
+            onValueChange = { dragging = it },
+            onValueChangeFinished = {
+                dragging?.let { TerminalHub.seekTo((it * duration).toLong()) }
+                dragging = null
+            },
+            enabled = duration > 0,
+            colors = SliderDefaults.colors(
+                thumbColor = ACCENT,
+                activeTrackColor = ACCENT,
+                inactiveTrackColor = Color(0x55FFFFFF),
+                disabledThumbColor = Color(0x55FFFFFF),
+                disabledActiveTrackColor = Color(0x55FFFFFF),
+                disabledInactiveTrackColor = Color(0x33FFFFFF)
+            ),
+            modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
+        )
+        Text(formatTime(duration), style = label)
+    }
+}
+
+@Composable
+private fun FullscreenControls(onExit: () -> Unit, modifier: Modifier) {
+    val audioOn by TerminalHub.audioOn.collectAsState()
+    var visible by remember { mutableStateOf(true) }
     Box(modifier.clickableNoRipple { visible = !visible }) {
         if (visible) {
             Column(
@@ -346,28 +373,7 @@ private fun FullscreenControls(onExit: () -> Unit, modifier: Modifier) {
                     CtrlBtn(Icons.Filled.SkipNext) { TerminalHub.control("next") }
                     CtrlBtn(Icons.Filled.Stop) { TerminalHub.control("stop") }
                 }
-                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(formatTime(position), style = label)
-                    Slider(
-                        value = dragging ?: if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f,
-                        onValueChange = { dragging = it },
-                        onValueChangeFinished = {
-                            dragging?.let { TerminalHub.seekTo((it * duration).toLong()) }
-                            dragging = null
-                        },
-                        enabled = duration > 0,
-                        colors = SliderDefaults.colors(
-                            thumbColor = ACCENT,
-                            activeTrackColor = ACCENT,
-                            inactiveTrackColor = Color(0x55FFFFFF),
-                            disabledThumbColor = Color(0x55FFFFFF),
-                            disabledActiveTrackColor = Color(0x55FFFFFF),
-                            disabledInactiveTrackColor = Color(0x33FFFFFF)
-                        ),
-                        modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
-                    )
-                    Text(formatTime(duration), style = label)
-                }
+                SeekBar()
             }
         }
     }
