@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.text.InputFilter
 import android.text.InputType
 import android.view.Gravity
+import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.EditText
@@ -25,6 +26,7 @@ import java.util.concurrent.Executors
 class EncoderEditorActivity : ComponentActivity() {
     private lateinit var editor: EditText
     private lateinit var status: TextView
+    private lateinit var actions: LinearLayout
     private lateinit var save: Button
     private lateinit var restore: Button
     private lateinit var cancel: Button
@@ -66,11 +68,14 @@ class EncoderEditorActivity : ComponentActivity() {
         save = Button(this).apply { text = "Save & Close"; isEnabled = false; setOnClickListener { saveDocument() } }
         restore = Button(this).apply { text = "Restore defaults"; isEnabled = false; setOnClickListener { confirmRestore() } }
         cancel = Button(this).apply { text = "Cancel"; setOnClickListener { closeEditor() } }
+        actions = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val buttons = LinearLayout(this)
         buttons.addView(save, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         buttons.addView(cancel, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        root.addView(buttons)
-        root.addView(restore, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        actions.addView(buttons)
+        actions.addView(restore, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        root.addView(actions)
+        updateActions(resources.configuration.orientation)
         setContentView(root)
         ViewCompat.requestApplyInsets(root)
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) { override fun handleOnBackPressed() { closeEditor() } })
@@ -89,6 +94,10 @@ class EncoderEditorActivity : ComponentActivity() {
                 runOnUiThread { if (!isDestroyed) { busy = false; status.text = error.message ?: "Unable to load presets" } }
             }
         }
+    }
+
+    private fun updateActions(orientation: Int) {
+        actions.visibility = if (orientation == Configuration.ORIENTATION_LANDSCAPE) View.GONE else View.VISIBLE
     }
 
     private fun callPython(module: String, method: String, vararg args: Any): JSONObject =
@@ -167,6 +176,7 @@ class EncoderEditorActivity : ComponentActivity() {
     override fun onConfigurationChanged(configuration: Configuration) {
         val position = capturePosition()
         super.onConfigurationChanged(configuration)
+        updateActions(configuration.orientation)
         ViewCompat.requestApplyInsets(editor.rootView)
         restorePosition(position)
     }
