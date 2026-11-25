@@ -2,7 +2,7 @@
 
 [Español](#español) · [English](#english) · [Dependencias / Dependencies](#dependencias--dependencies)
 
-Repositorio / Repository: https://github.com/iecxiv/yewtube-android
+Repositorio / Repository: https://github.com/iecxiv/yewdroid
 
 ## Español
 
