@@ -1,10 +1,16 @@
 package iecxiv.yewdroid
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
 import android.media.AudioManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -81,9 +87,32 @@ fun TerminalScreen() {
     var selectedZoom by remember { mutableStateOf<Float?>(null) }
     val currentZoom = selectedZoom ?: savedZoom
     val uiStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = FG)
-    val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    val batteryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {}
+    fun askBatteryExemption() {
+        val pm = ctx.getSystemService(PowerManager::class.java) ?: return
+        val prefs = ctx.getSharedPreferences("yewdroid_prompts", Context.MODE_PRIVATE)
+        if (pm.isIgnoringBatteryOptimizations(ctx.packageName) || prefs.getBoolean("battery_prompted", false)) return
+        prefs.edit().putBoolean("battery_prompted", true).apply()
+        val request = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+            .setData(Uri.parse("package:" + ctx.packageName))
+        try {
+            batteryLauncher.launch(request)
+        } catch (_: ActivityNotFoundException) {
+            try {
+                batteryLauncher.launch(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            } catch (_: ActivityNotFoundException) {
+            }
+        }
+    }
+    val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        askBatteryExemption()
+    }
     LaunchedEffect(Unit) {
-        if (Build.VERSION.SDK_INT >= 33) permLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        if (Build.VERSION.SDK_INT >= 33) {
+            permLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            askBatteryExemption()
+        }
     }
     if (currentZoom == null || savedHistory == null) {
         Box(Modifier.fillMaxSize().background(BG).systemBarsPadding(), contentAlignment = Alignment.Center) {
