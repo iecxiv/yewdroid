@@ -5,6 +5,7 @@ import types
 def install(pafy):
     from mps_youtube import config, content, g, util
     from mps_youtube.commands import download as downloads, misc
+    from android_download_choice import download as download_selected, DownloadCancelled
 
     if getattr(downloads, "_android_commands_installed", False):
         return
@@ -20,12 +21,12 @@ def install(pafy):
         for position, song in enumerate(songs, 1):
             print("\n[cola %d/%d] %s" % (position, total, song.title))
             try:
-                result = pafy.download_video(song.ytid, config.DDIR.get, audio_only=dltype.startswith("da"))
+                result = download_selected(song.ytid, config.DDIR.get, dltype.lower())
                 if not result:
                     raise RuntimeError("La descarga no confirmo que el archivo se guardara")
                 destination = result if isinstance(result, str) else "carpeta local: %s" % config.DDIR.get
                 saved.append("%s -> %s" % (song.title, destination))
-            except KeyboardInterrupt:
+            except (KeyboardInterrupt, DownloadCancelled):
                 interrupted = True
                 break
             except Exception as error:
@@ -33,7 +34,7 @@ def install(pafy):
         remaining = total - len(saved) - len(failed)
         message = "Guardados %d/%d; fallos %d; pendientes %d." % (len(saved), total, len(failed), remaining)
         if interrupted:
-            message += " Cola interrumpida."
+            message += " Cola interrumpida o cancelada."
         if saved:
             message += "\n" + "\n".join(saved)
         if failed:
