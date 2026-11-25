@@ -1,8 +1,9 @@
 """Expose only the yewtube settings that have an effect in the Android app."""
 import re
 
-ALLOWED = ("AUDIO_FORMAT", "ALWAYS_REPEAT", "COLUMNS", "HISTORY")
+ALLOWED = ("AUDIO_FORMAT", "ALWAYS_REPEAT", "COLUMNS", "HISTORY", "SHOW_VIDEO")
 SHOWN = ("ENCODER",) + ALLOWED
+DEFAULTS = {"SHOW_VIDEO": False}
 
 
 def help_topic():
@@ -22,8 +23,11 @@ def help_topic():
     {2}set columns <columns>{1} - select extra displayed fields in search results:
          (valid: views comments rating date time user likes dislikes category ytid)
     {2}set history true|false{1} - record play history
+    {2}set show_video true|false{1} - show the video above the terminal (audio only if false)
 
     Use {2}1{1} and {2}0{1} in place of true and false.
+    Add {2}-a{1} or {2}-w{1} after a selection to play it only this time as audio or with video,
+    e.g. {2}1-3 -a{1}
     Other yewtube settings have no effect in the Android app.
     """.format(c.ul, c.w, c.y))
 
@@ -33,6 +37,9 @@ def install():
     from mps_youtube.commands import Command
     if getattr(g, "_android_config_installed", False):
         return
+
+    def default_of(name):
+        return DEFAULTS.get(name, config[name].default)
 
     def showconfig():
         out = "  %s%-17s   %s%s\n" % (c.ul, "Key", "Value", c.w)
@@ -52,7 +59,7 @@ def install():
         val = val.strip()
         if key == "ALL" and val.upper() == "DEFAULT":
             for name in SHOWN:
-                config[name].value = config[name].default
+                config[name].value = default_of(name)
                 config[name].temp_value = None
             config.save()
             message = "Default configuration reinstated"
@@ -65,7 +72,7 @@ def install():
                 message = "Unknown config item: %s%s%s" % (c.r, key.lower(), c.w)
         elif val.upper() == "DEFAULT":
             item = config[key]
-            item.value = item.default
+            item.value = default_of(key)
             item.temp_value = None
             config.save()
             message = "%s%s%s set to %s%s%s (default)" % (c.y, key.lower(), c.w, c.y, item.display or "None", c.w)

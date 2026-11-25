@@ -5,12 +5,14 @@ import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import android.view.SurfaceView
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -38,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
@@ -47,6 +50,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
@@ -125,6 +129,9 @@ fun TerminalScreen() {
     val playing by TerminalHub.playing.collectAsState()
     val audioOn by TerminalHub.audioOn.collectAsState()
     val now by TerminalHub.nowPlaying.collectAsState()
+    val videoOn by TerminalHub.videoOn.collectAsState()
+    val videoAspect by TerminalHub.videoAspect.collectAsState()
+    val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     var input by rememberSaveable { mutableStateOf("") }
     val history = savedHistory.orEmpty()
     var hIdx by remember { mutableIntStateOf(-1) }
@@ -160,6 +167,16 @@ fun TerminalScreen() {
                 .clickableNoRipple { changeZoom(-1f) }.padding(12.dp))
             Text("A+", color = FG, style = uiStyle, modifier = Modifier
                 .clickableNoRipple { changeZoom(1f) }.padding(12.dp))
+        }
+
+        if (playing && videoOn) {
+            Box(Modifier.fillMaxWidth().background(Color.Black), contentAlignment = Alignment.Center) {
+                val ratio = videoAspect.coerceIn(1f, 2.4f)
+                VideoSurface(
+                    if (landscape) Modifier.height(150.dp).aspectRatio(ratio)
+                    else Modifier.fillMaxWidth().aspectRatio(ratio)
+                )
+            }
         }
 
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 4.dp).clipToBounds()) {
@@ -235,6 +252,17 @@ fun TerminalScreen() {
             }
         }
     }
+}
+
+@Composable
+private fun VideoSurface(modifier: Modifier) {
+    val context = LocalContext.current
+    val view = remember { SurfaceView(context) }
+    DisposableEffect(view) {
+        TerminalHub.attachSurface(view)
+        onDispose { TerminalHub.detachSurface(view) }
+    }
+    AndroidView(factory = { view }, modifier = modifier)
 }
 
 @Composable

@@ -355,6 +355,8 @@ def _make_player_class(CmdPlayer):
             artist = (getattr(song, "uploader", None)
                       or getattr(song, "author", None) or "yewtube")
             thumb = "https://i.ytimg.com/vi/%s/hqdefault.jpg" % song.ytid
+            video = isinstance(self.stream, dict) and self.stream.get("mtype") == "video"
+            _sink.video(bool(video))
             _sink.mode(True)
             _sink.play(self.stream["url"], str(song.title), str(artist),
                        thumb, int(song.length or 0))

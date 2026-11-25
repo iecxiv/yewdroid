@@ -4,11 +4,13 @@ import android.content.Context
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.view.SurfaceView
 import androidx.compose.ui.text.AnnotatedString
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
 import androidx.media3.exoplayer.ExoPlayer
 import com.chaquo.python.PyObject
 import com.chaquo.python.Python
@@ -27,6 +29,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 interface TermSink {
     fun write(s: String)
     fun play(url: String, title: String, artist: String, thumb: String, lengthSec: Int)
+    fun video(on: Boolean)
     fun mode(playing: Boolean)
     fun stopPlayback()
 }
@@ -37,6 +40,7 @@ class HubSink : TermSink {
     override fun play(url: String, title: String, artist: String, thumb: String, lengthSec: Int) {
         TerminalHub.onPlay(url, title, artist, thumb)
     }
+    override fun video(on: Boolean) { TerminalHub.onVideo(on) }
     override fun mode(playing: Boolean) { TerminalHub.playing.value = playing }
     override fun stopPlayback() { TerminalHub.onStopPlayback() }
 }
@@ -48,6 +52,8 @@ object TerminalHub {
     val playing = MutableStateFlow(false)
     val audioOn = MutableStateFlow(false)
     val nowPlaying = MutableStateFlow("")
+    val videoOn = MutableStateFlow(false)
+    val videoAspect = MutableStateFlow(16f / 9f)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val main = Handler(Looper.getMainLooper())
@@ -55,6 +61,8 @@ object TerminalHub {
     private val sizes = Channel<Pair<Int, Int>>(Channel.CONFLATED)
     @Volatile private var py: PyObject? = null
     @Volatile private var exo: ExoPlayer? = null
+    @Volatile private var nextVideo = false
+    private var surface: SurfaceView? = null
     private var started = false
     private val sink = HubSink()
 
@@ -63,6 +71,11 @@ object TerminalHub {
             if (state == Player.STATE_ENDED && playing.value) event("next")
         }
         override fun onIsPlayingChanged(isPlaying: Boolean) { audioOn.value = isPlaying }
+        override fun onVideoSizeChanged(videoSize: VideoSize) {
+            if (videoSize.width > 0 && videoSize.height > 0) {
+                videoAspect.value = videoSize.width * videoSize.pixelWidthHeightRatio / videoSize.height
+            }
+        }
         override fun onPlayerError(error: PlaybackException) {
             onWrite("\n\u001b[31m[player] ${error.errorCodeName}\u001b[0m\n")
             if (playing.value) event("next")
@@ -72,11 +85,22 @@ object TerminalHub {
     fun registerPlayer(p: ExoPlayer) {
         exo = p
         p.addListener(listener)
+        surface?.let { p.setVideoSurfaceView(it) }
     }
 
     fun unregisterPlayer() {
         exo?.removeListener(listener)
         exo = null
+    }
+
+    fun attachSurface(view: SurfaceView) {
+        surface = view
+        exo?.setVideoSurfaceView(view)
+    }
+
+    fun detachSurface(view: SurfaceView) {
+        if (surface === view) surface = null
+        exo?.clearVideoSurfaceView(view)
     }
 
     @Synchronized
@@ -121,8 +145,11 @@ object TerminalHub {
         }
     }
 
+    fun onVideo(on: Boolean) { nextVideo = on }
+
     fun onPlay(url: String, title: String, artist: String, thumb: String) {
         nowPlaying.value = title
+        videoOn.value = nextVideo
         main.post {
             val p = exo
             if (p == null) {
@@ -141,6 +168,7 @@ object TerminalHub {
     fun onStopPlayback() {
         playing.value = false
         nowPlaying.value = ""
+        videoOn.value = false
         main.post { exo?.stop(); exo?.clearMediaItems() }
     }
 
