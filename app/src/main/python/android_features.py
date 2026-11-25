@@ -26,6 +26,7 @@ def _clean_basic_help(body):
 def install():
     from mps_youtube import config, g, helptext
     from mps_youtube.commands import Command, config as config_commands, lastfm
+    from android_encode import HELP as encode_help, install as install_encode
     if getattr(g, "_android_features_installed", False):
         return
 
@@ -42,10 +43,13 @@ def install():
                 body = "\n".join(line for line in body.split("\n")
                                  if not re.match(r"\s*set(?:\s|$)", ANSI.sub("", line)))
                 result.append((name, title, body))
+        result.append(("encode", "Conversion MP3 en Android", encode_help))
         return result
 
     def get_help(choice=None):
         name = (choice or "").strip().lower()
+        if name in ("encode", "encoding", "mp3", "transcode", "transcoding"):
+            return encode_help
         if name in REMOVED or name in HELP_ALIASES:
             return "Este apartado no esta disponible en la app Android.\nUsa help para ver las opciones disponibles."
         return original_help(choice)
@@ -98,4 +102,5 @@ def install():
 
     config.load = load
     enforce()
+    install_encode()
     g._android_features_installed = True
