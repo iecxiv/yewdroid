@@ -1,4 +1,4 @@
-"""Remove desktop-only help and commands without deleting internal settings."""
+"""Remove desktop-only commands while preserving original encoding profiles."""
 import re
 import sys
 
@@ -39,22 +39,20 @@ def install():
             if name not in REMOVED:
                 if name == "basic":
                     body = _clean_basic_help(body)
-                # Other retained topics must not advertise the disabled set command.
                 body = "\n".join(line for line in body.split("\n")
                                  if not re.match(r"\s*set(?:\s|$)", ANSI.sub("", line)))
                 result.append((name, title, body))
-        result.append(("encode", "Conversion MP3 en Android", encode_help))
+        result.append(("encode", "Perfiles originales de codificacion", encode_help))
         return result
 
     def get_help(choice=None):
         name = (choice or "").strip().lower()
-        if name in ("encode", "encoding", "mp3", "transcode", "transcoding"):
+        if name in ("encode", "encoder", "encoders", "encoding", "mp3", "wma", "transcode", "transcoding"):
             return encode_help
         if name in REMOVED or name in HELP_ALIASES:
             return "Este apartado no esta disponible en la app Android.\nUsa help para ver las opciones disponibles."
         return original_help(choice)
 
-    # Replace imported-by-value aliases too, notably misc.get_help and init.helptext.
     for name, module in tuple(sys.modules.items()):
         if name.startswith("mps_youtube.") and module is not None:
             for attribute, value in tuple(vars(module).items()):
@@ -86,7 +84,7 @@ def install():
     g.scrobble = False
 
     def enforce():
-        for key, value in {"DOWNLOAD_COMMAND": "", "ENCODER": 0,
+        for key, value in {"DOWNLOAD_COMMAND": "",
                            "LOOKUP_METADATA": False, "CHECKUPDATE": False}.items():
             setting = getattr(config, key, None)
             if setting is not None:

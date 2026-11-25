@@ -1,108 +1,95 @@
-"""Explicit Android MP3 conversion; never changes automatic audio downloads."""
+"""Original yewtube profile selection with Android FFmpeg execution."""
 import os
 import re
-import shutil
+import shlex
 import subprocess
-import tempfile
 
-HELP = """encode [N]
-Abre el menu de conversion a MP3 de un video de la lista actual.
-Si no indicas N, pregunta el numero. Elige 128, 192, 256 o 320 kbps.
-Enter cancela antes de descargar. Requiere FFmpeg con libmp3lame incluido.
-Descarga el mejor audio y lo convierte; da mantiene el audio original.
-No convierte archivos ya descargados ni configura conversion automatica.
+HELP = """encoder / encoders: perfiles originales de yewtube.
+set encoder N: seleccion persistente. set encoder default: None.
+None conserva el original. da aplica el perfil si admite la extension.
+Los parametros y formatos validos se leen del fichero transcode original.
 """
 
 
-def ask_number(prompt, allowed):
-    while True:
-        answer = input(prompt).strip()
-        if not answer:
-            return None
-        if answer.isdigit() and int(answer) in allowed:
-            return int(answer)
-        print("Seleccion fuera de rango.")
+def selected_profile():
+    from mps_youtube import config, g
+    index = config.ENCODER.get
+    if not isinstance(index, int) or not 0 <= index < len(g.encoders):
+        raise RuntimeError("Perfil fuera de rango; usa encoders y set encoder N")
+    return dict(g.encoders[index]), bool(g.delete_orig)
 
 
-def convert(song, folder, bitrate):
-    import yt_dlp
-    from android_ffmpeg import binaries, encode_mp3
-    from android_video_download import _publish
+def accepts(profile, extension):
+    return profile.get("ext") != "COPY" and extension in profile.get("valid", "").split(",")
+
+
+def arguments(profile, source, output):
+    tokens = shlex.split(profile.get("command", ""))
+    if not tokens or tokens[0] != "ENCODER_PATH":
+        raise RuntimeError("El perfil debe comenzar por ENCODER_PATH")
+    if "IN" not in tokens or not any(token in ("OUT", "OUT.EXT") for token in tokens):
+        raise RuntimeError("El perfil no declara entrada y salida")
+    extension = profile.get("ext", "")
+    if not re.fullmatch(r"[a-zA-Z0-9]+", extension):
+        raise RuntimeError("Extension de perfil no valida")
+    replacements = {"IN": source, "OUT": os.path.splitext(output)[0], "OUT.EXT": output}
+    return [replacements.get(token, token) for token in tokens[1:]]
+
+
+def validate(profile):
+    from android_ffmpeg import binaries
     ffmpeg, ffprobe = binaries()
     for path in (ffmpeg, ffprobe):
         subprocess.run([path, "-version"], check=True, capture_output=True, timeout=15)
-    encoders = subprocess.run([ffmpeg, "-hide_banner", "-encoders"], check=True,
-                             capture_output=True, text=True, timeout=20)
-    if not re.search(r"^\s*[A-Z.]+\s+libmp3lame\s", encoders.stdout, re.MULTILINE):
-        raise RuntimeError("Esta compilacion FFmpeg no dispone de libmp3lame; no se descargo nada")
-    folder = os.path.abspath(folder)
-    os.makedirs(folder, exist_ok=True)
-    work = tempfile.mkdtemp(prefix=".yewdroid-encode-", dir=folder)
-    options = {"format": "ba", "quiet": True, "noplaylist": True, "postprocessors": [],
-               "fixup": "never", "hls_prefer_native": True, "retries": 3,
-               "fragment_retries": 3, "socket_timeout": 25,
-               "outtmpl": os.path.join(work, "original-%(title).100B-%(id)s.%(ext)s"),
-               "match_filter": lambda info, *, incomplete=False: (
-                   "No se admiten emisiones en directo" if info.get("is_live") else None)}
-    try:
-        print("[encode] Descargando el mejor audio original...")
-        with yt_dlp.YoutubeDL(options) as ydl:
-            info = ydl.extract_info("https://www.youtube.com/watch?v=%s" % song.ytid, download=True)
-            if not info or info.get("vcodec") != "none" or info.get("acodec") in (None, "none"):
-                raise RuntimeError("No se recibio una pista exclusivamente de audio")
-            requests = info.get("requested_downloads") or []
-            source = (requests[0].get("filepath") if requests else None) or ydl.prepare_filename(info)
-        if os.path.commonpath([os.path.realpath(work), os.path.realpath(source)]) != os.path.realpath(work):
-            raise RuntimeError("Ruta de audio inesperada")
-        if not os.path.isfile(source) or os.path.getsize(source) == 0:
-            raise RuntimeError("Audio ausente o vacio")
-        filename = os.path.basename(os.path.splitext(source)[0])
-        output = os.path.join(work, filename.removeprefix("original-") + "-%dk.mp3" % bitrate)
-        print("[encode] Convirtiendo a MP3 %d kbps..." % bitrate)
-        encode_mp3(source, output, bitrate)
-        if not os.path.isfile(output) or os.path.getsize(output) == 0:
-            raise RuntimeError("FFmpeg no genero un MP3 terminado")
-        destination = _publish(output)
-        if not isinstance(destination, str) or not destination:
-            raise RuntimeError("La exportacion no confirmo el destino")
-    except BaseException:
-        print("[encode] Interrumpido. Archivos conservados: " + work)
-        raise
-    if destination != os.path.abspath(output):
-        shutil.rmtree(work, ignore_errors=True)
-    return destination
+    tokens = arguments(profile, "input", "output." + profile.get("ext", ""))
+    codec = None
+    for flag in ("-codec:a", "-c:a", "-acodec"):
+        if flag in tokens:
+            index = tokens.index(flag) + 1
+            if index >= len(tokens):
+                raise RuntimeError("Perfil sin codificador")
+            codec = tokens[index]
+            break
+    if codec and codec != "copy":
+        result = subprocess.run([ffmpeg, "-hide_banner", "-encoders"], check=True,
+                                capture_output=True, text=True, timeout=20)
+        if not re.search(r"^\s*[A-Z.]+\s+" + re.escape(codec) + r"\s", result.stdout, re.MULTILINE):
+            raise RuntimeError("Falta codificador requerido: " + codec)
+
+
+def apply_profile(source, profile):
+    from android_ffmpeg import run
+    output = os.path.splitext(source)[0] + "-encoded." + profile["ext"]
+    print("\n[encode] " + profile.get("name", "perfil"))
+    run(arguments(profile, source, output))
+    if not os.path.isfile(output) or os.path.getsize(output) == 0:
+        raise RuntimeError("La conversion no genero un archivo terminado")
+    return output
 
 
 def install():
-    from mps_youtube import g, config, content, screen
+    from mps_youtube import g, config
     from mps_youtube.commands import Command
+    from mps_youtube.commands.config import show_encs
     if getattr(g, "_android_encode_installed", False):
         return
 
-    def command(number=None):
-        try:
-            if g.browse_mode != "normal" or not len(g.model):
-                raise RuntimeError("Abre una lista de videos antes de usar encode")
-            g.content = HELP
-            screen.update()
-            selected = int(number) if number else ask_number("Numero de video (Enter cancela): ", range(1, len(g.model) + 1))
-            if selected is None:
-                message = "Conversion cancelada; no se descargo nada."
-            elif not 1 <= selected <= len(g.model):
-                raise RuntimeError("Numero de video fuera de rango")
-            else:
-                bitrate = ask_number("MP3 kbps [128/192/256/320] (Enter cancela): ", (128, 192, 256, 320))
-                if bitrate is None:
-                    message = "Conversion cancelada; no se descargo nada."
-                else:
-                    destination = convert(g.model[selected - 1], config.DDIR.get, bitrate)
-                    message = "MP3 guardado: " + destination
-        except KeyboardInterrupt:
-            message = "Conversion interrumpida; revisa la ruta de archivos conservados."
-        except Exception as error:
-            message = "Error de conversion: " + str(error)
-        g.content = content.generate_songlist_display()
+    def select(value):
+        if value.strip().lower() == "default":
+            old_value, old_temp = config.ENCODER.value, config.ENCODER.temp_value
+            config.ENCODER.value = config.ENCODER.default
+            config.ENCODER.temp_value = None
+            try:
+                config.save()
+            except BaseException:
+                config.ENCODER.value, config.ENCODER.temp_value = old_value, old_temp
+                raise
+            message = "Encoder restablecido a None"
+        else:
+            message = config.ENCODER.set(value)
+        show_encs()
         g.message = message
 
-    g.commands.insert(0, Command(re.compile(r"encode(?:\s+(\d{1,4}))?\s*$", re.IGNORECASE), None, None, command))
+    g.commands.insert(0, Command(re.compile(r"encoders?\s*$", re.IGNORECASE), None, None, show_encs))
+    g.commands.insert(0, Command(re.compile(r"set\s+encoder\s+(\S+)\s*$", re.IGNORECASE), None, None, select))
     g._android_encode_installed = True

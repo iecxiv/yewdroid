@@ -1,4 +1,4 @@
-"""Explicit choice and best selectors with optional FFmpeg track merging."""
+"""Explicit choice, best selectors, and original audio encoding profiles."""
 import os
 import shutil
 import subprocess
@@ -88,6 +88,7 @@ def plan(ydl, info, mode, ffmpeg=False):
 def download(ytid, folder, mode):
     import yt_dlp
     from android_video_download import _publish
+    from android_encode import selected_profile, accepts, validate, apply_profile
     folder = os.path.abspath(folder)
     options = {"quiet": True, "noplaylist": True, "postprocessors": [], "fixup": "never",
                "hls_prefer_native": True, "retries": 3, "fragment_retries": 3, "socket_timeout": 25}
@@ -98,6 +99,15 @@ def download(ytid, folder, mode):
         if not info or info.get("is_live"):
             raise RuntimeError("No se admiten emisiones en directo o extracciones vacias")
         tracks = plan(ydl, info, mode, ffmpeg)
+    profile = None
+    delete_original = True
+    if len(tracks) == 1 and kind(tracks[0]) == "audio":
+        selected, delete_original = selected_profile()
+        if accepts(selected, tracks[0].get("ext")):
+            validate(selected)
+            profile = selected
+        elif selected.get("ext") != "COPY":
+            print("[encode] El perfil no admite esta extension; se conserva el original.")
     os.makedirs(folder, exist_ok=True)
     work = tempfile.mkdtemp(prefix=".yewdroid-choice-", dir=folder)
     try:
@@ -130,6 +140,8 @@ def download(ytid, folder, mode):
                 raise RuntimeError("Ruta de descarga inesperada")
             if not os.path.isfile(path) or os.path.getsize(path) == 0:
                 raise RuntimeError("Archivo descargado ausente o vacio")
+            if profile and not accepts(profile, os.path.splitext(path)[1].lstrip(".")):
+                raise RuntimeError("La extension descargada ya no es compatible con el perfil")
             paths.append(path)
         output = paths[0]
         if len(paths) == 2:
@@ -144,6 +156,8 @@ def download(ytid, folder, mode):
                 if not can_mux(tracks[0], tracks[1]):
                     raise RuntimeError("Pistas incompatibles con el multiplexador")
                 jclass("iecxiv.yewdroid.Mp4Muxer").merge(paths[0], paths[1], output)
+        if profile:
+            output = apply_profile(output, profile)
         if not os.path.isfile(output) or os.path.getsize(output) == 0:
             raise RuntimeError("Archivo final ausente o vacio")
         destination = _publish(output)
@@ -152,7 +166,11 @@ def download(ytid, folder, mode):
     except BaseException:
         print("\nDescarga interrumpida. Archivos conservados: " + work)
         raise
-    if destination != os.path.abspath(output):
+    if profile and not delete_original:
+        print("[encode] Original conservado localmente: " + paths[0])
+    elif destination != os.path.abspath(output):
         shutil.rmtree(work, ignore_errors=True)
+    elif profile and delete_original and paths[0] != output:
+        os.unlink(paths[0])
     print("\nGuardado: " + destination)
     return destination
