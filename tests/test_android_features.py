@@ -54,8 +54,8 @@ class FeatureTests(unittest.TestCase):
     def test_topics_and_imported_aliases(self):
         self.assertEqual([row[0] for row in self.init.helptext()], ["basic", "search"])
         self.assertTrue(all(row[2] == "keep" for row in self.help.helptext()))
-        self.assertIn("no esta disponible", self.misc.get_help("tor"))
-        self.assertIn("no esta disponible", self.misc.get_help("download_command"))
+        self.assertIn("not available in the Android app", self.misc.get_help("tor"))
+        self.assertIn("not available in the Android app", self.misc.get_help("download_command"))
         self.assertEqual(len(self.misc.get_help("search")), 2)
 
     def test_blocked_commands_and_allowed_handlers(self):

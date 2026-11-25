@@ -127,7 +127,7 @@ class LinkTests(unittest.TestCase):
     def test_invalid_selection_does_not_launch(self):
         for command in ("openwith 0", "share 2"):
             self.dispatch(command)
-            self.assertIn("fuera de rango", self.g.message)
+            self.assertIn("out of range", self.g.message)
         self.g.browse_mode = "local"
         self.dispatch("openwith 1")
         self.assertEqual(self.calls, [])

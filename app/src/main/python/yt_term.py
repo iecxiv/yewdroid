@@ -1,7 +1,7 @@
-"""Adaptador: ejecuta yewtube (mps_youtube) dentro de Android.
+"""Adapter: runs yewtube (mps_youtube) inside Android.
 
-stdout/stdin -> terminal Compose; reproductor mpv/vlc -> ExoPlayer (Media3).
-No se modifica el codigo de yewtube: todo se parchea en tiempo de ejecucion.
+stdout/stdin -> Compose terminal; mpv/vlc player -> ExoPlayer (Media3).
+The yewtube code is not modified: everything is patched at runtime.
 """
 import json
 import os
@@ -12,7 +12,7 @@ import time
 import traceback
 import types
 
-# True: yewtube muestra los tracebacks en pantalla (modo debug). Pon False cuando todo vaya bien.
+# True: yewtube shows tracebacks on screen (debug mode). Set to False once everything works.
 _DEBUG = True
 
 _INTR = object()
@@ -120,8 +120,8 @@ def _prepare_env(files_dir):
 
 
 def _stub_pip():
-    """mps_youtube/__init__.py hace 'from pip._vendor import pkg_resources'
-    para leer su version; en Android no hay pip, asi que lo simulamos."""
+    """mps_youtube/__init__.py does 'from pip._vendor import pkg_resources'
+    to read its version; Android has no pip, so we simulate it."""
     import importlib.metadata as md
 
     pip = types.ModuleType("pip")
@@ -150,9 +150,9 @@ def _stub_pip():
 
 
 def _stub_readline():
-    """main.py solo crea 'completer' si 'import readline' funciona, y
-    commands/__init__.py hace completer.add_cmd(). Android no trae readline,
-    asi que ponemos un modulo vacio (sin autocompletado)."""
+    """main.py only creates 'completer' if 'import readline' works, and
+    commands/__init__.py calls completer.add_cmd(). Android has no readline,
+    so we provide an empty module (no autocompletion)."""
     try:
         import readline  # noqa: F401
         return
@@ -172,7 +172,7 @@ def _stub_readline():
 
 
 def _patch_traceback():
-    """Los tracebacks tambien van al Logcat (etiqueta python.stderr)."""
+    """Tracebacks also go to Logcat (tag python.stderr)."""
     orig = traceback.print_exception
 
     def pe(*a, **k):
@@ -187,7 +187,7 @@ def _patch_traceback():
 
 
 def _find_qjs():
-    """Binario QuickJS empaquetado como libqjs.so en jniLibs (ejecutable desde nativeLibraryDir)."""
+    """QuickJS binary packaged as libqjs.so in jniLibs (executable from nativeLibraryDir)."""
     app = None
     try:
         from com.chaquo.python import Python
@@ -208,11 +208,11 @@ def _find_qjs():
 
 
 def _patch_js_runtime():
-    """Inyecta js_runtimes=quickjs en todas las instancias de yt_dlp.YoutubeDL."""
+    """Injects js_runtimes=quickjs into every yt_dlp.YoutubeDL instance."""
     import yt_dlp
     qjs = _find_qjs()
     if not qjs:
-        _orig_err.write("[js] libqjs.so no encontrado: yt-dlp sin runtime JS\n")
+        _orig_err.write("[js] libqjs.so not found: yt-dlp has no JS runtime\n")
         return
     _orig_err.write("[js] quickjs: %s\n" % qjs)
     Orig = yt_dlp.YoutubeDL
@@ -227,8 +227,8 @@ def _patch_js_runtime():
 
 
 def _patch_downloads():
-    """Audio sin conversion; video mediante el multiplexador nativo de Android.
-    Si el audio falla, el error incluye la lista de formatos que ve yt-dlp."""
+    """Audio without conversion; video through Android's native muxer.
+    If audio fails, the error includes the list of formats yt-dlp sees."""
     import yt_dlp
     from mps_youtube import pafy as ypafy
 
@@ -237,9 +237,9 @@ def _patch_downloads():
             tot = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
             if tot:
                 pct = 100.0 * d.get("downloaded_bytes", 0) / tot
-                sys.stdout.write("\r  Descargando %5.1f%%   " % pct)
+                sys.stdout.write("\r  Downloading %5.1f%%   " % pct)
         elif d.get("status") == "finished":
-            sys.stdout.write("\r  Descarga completa        \n")
+            sys.stdout.write("\r  Download complete        \n")
 
     def download_video(ytid, folder, audio_only=False):
         os.makedirs(folder, exist_ok=True)
@@ -262,7 +262,7 @@ def _patch_downloads():
                 return True
             except Exception as e:
                 last = e
-        # La pantalla se borra tras el error, asi que el diagnostico va DENTRO de la excepcion.
+        # The screen is cleared after the error, so the diagnostic goes INSIDE the exception.
         lines = []
         try:
             with yt_dlp.YoutubeDL({"quiet": True}) as ydl:
@@ -272,8 +272,8 @@ def _patch_downloads():
                     f.get("format_id"), f.get("ext"), f.get("protocol"),
                     f.get("acodec"), f.get("vcodec"), f.get("format_note")))
         except Exception as e2:
-            lines.append("(no se pudo listar: %s)" % e2)
-        msg = "%s\nFormatos vistos por yt-dlp (%d):\n%s" % (last, len(lines), "\n".join(lines))
+            lines.append("(could not list formats: %s)" % e2)
+        msg = "%s\nFormats seen by yt-dlp (%d):\n%s" % (last, len(lines), "\n".join(lines))
         _orig_err.write(msg + "\n")
         raise RuntimeError(msg)
 
@@ -298,7 +298,7 @@ def _write_config(g, files_dir):
     cfg.setdefault("LOOKUP_METADATA", False)
     cfg.setdefault("SHOW_PLAYER_KEYS", False)
 
-    # Descargas en la carpeta externa de la app (accesible por adb / explorador)
+    # Downloads go to the app's external folder (reachable through adb / a file explorer)
     pkg = os.path.basename(os.path.dirname(files_dir.rstrip("/")))
     ext = "/storage/emulated/0/Android/data/%s/files/Download" % pkg
     default = os.path.join(files_dir, "Downloads")
@@ -418,7 +418,7 @@ def _run(files_dir):
             except Exception:
                 traceback.print_exc(file=_orig_err)
                 traceback.print_exc(file=sys.stdout)
-            sys.stdout.write("\n\x1b[33m[sesion terminada] Pulsa ENTER para reiniciar YewDroid\x1b[0m\n")
+            sys.stdout.write("\n\x1b[33m[session ended] Press ENTER to restart YewDroid\x1b[0m\n")
             while True:
                 item = _in.q.get()
                 if item is not _INTR:

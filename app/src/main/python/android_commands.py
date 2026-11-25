@@ -19,12 +19,12 @@ def install(pafy):
         interrupted = False
         total = len(songs)
         for position, song in enumerate(songs, 1):
-            print("\n[cola %d/%d] %s" % (position, total, song.title))
+            print("\n[queue %d/%d] %s" % (position, total, song.title))
             try:
                 result = download_selected(song.ytid, config.DDIR.get, dltype.lower())
                 if not result:
-                    raise RuntimeError("La descarga no confirmo que el archivo se guardara")
-                destination = result if isinstance(result, str) else "carpeta local: %s" % config.DDIR.get
+                    raise RuntimeError("The download did not confirm that the file was saved")
+                destination = result if isinstance(result, str) else "local folder: %s" % config.DDIR.get
                 saved.append("%s -> %s" % (song.title, destination))
             except (KeyboardInterrupt, DownloadCancelled):
                 interrupted = True
@@ -32,13 +32,13 @@ def install(pafy):
             except Exception as error:
                 failed.append("%s: %s" % (song.title, error))
         remaining = total - len(saved) - len(failed)
-        message = "Guardados %d/%d; fallos %d; pendientes %d." % (len(saved), total, len(failed), remaining)
+        message = "Saved %d/%d; failed %d; pending %d." % (len(saved), total, len(failed), remaining)
         if interrupted:
-            message += " Cola interrumpida o cancelada."
+            message += " Queue interrupted or cancelled."
         if saved:
             message += "\n" + "\n".join(saved)
         if failed:
-            message += "\nErrores:\n" + "\n".join(failed)
+            message += "\nErrors:\n" + "\n".join(failed)
         finish(message)
         return not failed and not interrupted
 
@@ -48,29 +48,29 @@ def install(pafy):
     def single(dltype, num):
         if g.browse_mode == "ytpl":
             if dltype not in ("da", "dv"):
-                finish("Usa da o dv para descargar una playlist.")
+                finish("Use da or dv to download a playlist.")
                 return False
             index = int(num) - 1
             if index < 0 or index >= len(g.ytpls):
-                finish("Numero de playlist fuera de rango.")
+                finish("Playlist number out of range.")
                 return False
             return downloads.down_plist(dltype, g.ytpls[index]["link"])
         if g.browse_mode != "normal":
-            finish("La descarga debe referirse a un video de la lista actual.")
+            finish("The download must refer to a video in the current list.")
             return False
         index = int(num) - 1
         if index < 0 or index >= len(g.model):
-            finish("Numero de video fuera de rango.")
+            finish("Video number out of range.")
             return False
         return run_items(dltype, [g.model[index]])
 
     def many(dltype, choice, subdir=None):
         if g.browse_mode != "normal":
-            finish("Abre primero los videos de la playlist para descargar varios elementos.")
+            finish("Open the playlist videos first to download several items.")
             return False
         numbers = list(dict.fromkeys(util.parse_multi(choice)))
         if not numbers or any(number < 1 or number > len(g.model) for number in numbers):
-            finish("Seleccion de descarga fuera de rango; no se descargo ningun elemento.")
+            finish("Download selection out of range; nothing was downloaded.")
             return False
         # All files use the public destination returned by the Android backend.
         return run_items(dltype, [g.model[number - 1] for number in numbers])

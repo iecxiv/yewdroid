@@ -54,18 +54,18 @@ def install():
         index = int(number) - 1
         if g.browse_mode == "ytpl":
             if index < 0 or index >= len(g.ytpls):
-                raise ValueError("Numero de playlist fuera de rango")
+                raise ValueError("Playlist number out of range")
             identifier = g.ytpls[index].get("link")
             path, key = "playlist", "list"
         elif g.browse_mode == "normal":
             if index < 0 or index >= len(g.model):
-                raise ValueError("Numero de video fuera de rango")
+                raise ValueError("Video number out of range")
             identifier = getattr(g.model[index], "ytid", None)
             path, key = "watch", "v"
         else:
-            raise ValueError("Este modo no contiene enlaces de videos o playlists")
+            raise ValueError("This mode contains no video or playlist links")
         if not isinstance(identifier, str) or not identifier.strip():
-            raise ValueError("El elemento no contiene un identificador valido")
+            raise ValueError("The item has no valid identifier")
         return "https://www.youtube.com/%s?%s" % (path, urlencode({key: identifier}))
 
     @command(r"(openwith|share)\s+(\d{1,4})", "openwith", "share")
@@ -78,7 +78,7 @@ def install():
             result = jclass("iecxiv.yewdroid.AndroidLinks").perform(app, android_action, url)
             finish(str(result))
         except Exception as error:
-            finish("No se pudo abrir o compartir el enlace: %s" % error)
+            finish("Could not open or share the link: %s" % error)
 
     @command(r"(?:help|h)\s+(openwith|share)")
     @command(r"(openwith|share)")

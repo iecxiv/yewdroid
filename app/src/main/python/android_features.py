@@ -65,7 +65,7 @@ def install():
         if name in ("encode", "encoder", "encoders", "encoding", "mp3", "wma", "format", "transcode", "transcoding"):
             return original_help("encode")
         if name in REMOVED or name in HELP_ALIASES:
-            return "Este apartado no esta disponible en la app Android.\nUsa help para ver las opciones disponibles."
+            return "This section is not available in the Android app.\nUse help to see the available options."
         return original_help(choice)
 
     for name, module in tuple(sys.modules.items()):
@@ -79,7 +79,7 @@ def install():
     def unavailable(*args, **kwargs):
         from mps_youtube import content
         g.content = content.generate_songlist_display()
-        g.message = "Opcion desactivada en la app Android. Usa help."
+        g.message = "Option disabled in the Android app. Use help."
 
     blocked_modules = {config_commands.__name__, lastfm.__name__}
     g.commands[:] = [entry for entry in g.commands

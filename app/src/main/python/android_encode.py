@@ -4,10 +4,10 @@ import re
 import shlex
 import subprocess
 
-HELP = """encoder / encoders: perfiles originales de yewtube.
-set encoder N: seleccion persistente. set encoder default: None.
-None conserva el original. da aplica el perfil si admite la extension.
-Los parametros y formatos validos se leen del fichero transcode original.
+HELP = """encoder / encoders: original yewtube profiles.
+set encoder N: persistent selection. set encoder default: None.
+None keeps the original. da applies the profile if it supports the extension.
+Parameters and valid formats are read from the original transcode file.
 """
 
 
@@ -15,7 +15,7 @@ def selected_profile():
     from mps_youtube import config, g
     index = config.ENCODER.get
     if not isinstance(index, int) or not 0 <= index < len(g.encoders):
-        raise RuntimeError("Perfil fuera de rango; usa encoders y set encoder N")
+        raise RuntimeError("Profile out of range; use encoders and set encoder N")
     return dict(g.encoders[index]), bool(g.delete_orig)
 
 
@@ -26,12 +26,12 @@ def accepts(profile, extension):
 def arguments(profile, source, output):
     tokens = shlex.split(profile.get("command", ""))
     if not tokens or tokens[0] != "ENCODER_PATH":
-        raise RuntimeError("El perfil debe comenzar por ENCODER_PATH")
+        raise RuntimeError("The profile must start with ENCODER_PATH")
     if "IN" not in tokens or not any(token in ("OUT", "OUT.EXT") for token in tokens):
-        raise RuntimeError("El perfil no declara entrada y salida")
+        raise RuntimeError("The profile does not declare input and output")
     extension = profile.get("ext", "")
     if not re.fullmatch(r"[a-zA-Z0-9]+", extension):
-        raise RuntimeError("Extension de perfil no valida")
+        raise RuntimeError("Invalid profile extension")
     replacements = {"IN": source, "OUT": os.path.splitext(output)[0], "OUT.EXT": output}
     return [replacements.get(token, token) for token in tokens[1:]]
 
@@ -47,23 +47,23 @@ def validate(profile):
         if flag in tokens:
             index = tokens.index(flag) + 1
             if index >= len(tokens):
-                raise RuntimeError("Perfil sin codificador")
+                raise RuntimeError("Profile has no encoder")
             codec = tokens[index]
             break
     if codec and codec != "copy":
         result = subprocess.run([ffmpeg, "-hide_banner", "-encoders"], check=True,
                                 capture_output=True, text=True, timeout=20)
         if not re.search(r"^\s*[A-Z.]+\s+" + re.escape(codec) + r"\s", result.stdout, re.MULTILINE):
-            raise RuntimeError("Falta codificador requerido: " + codec)
+            raise RuntimeError("Required encoder is missing: " + codec)
 
 
 def apply_profile(source, profile):
     from android_ffmpeg import run
     output = os.path.splitext(source)[0] + "-encoded." + profile["ext"]
-    print("\n[encode] " + profile.get("name", "perfil"))
+    print("\n[encode] " + profile.get("name", "profile"))
     run(arguments(profile, source, output))
     if not os.path.isfile(output) or os.path.getsize(output) == 0:
-        raise RuntimeError("La conversion no genero un archivo terminado")
+        raise RuntimeError("The conversion did not produce a finished file")
     return output
 
 
@@ -84,7 +84,7 @@ def install():
             except BaseException:
                 config.ENCODER.value, config.ENCODER.temp_value = old_value, old_temp
                 raise
-            message = "Encoder restablecido a None"
+            message = "Encoder reset to None"
         else:
             message = config.ENCODER.set(value)
         show_encs()
