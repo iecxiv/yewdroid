@@ -1,7 +1,7 @@
 """Expose only the yewtube settings that have an effect in the Android app."""
 import re
 
-ALLOWED = ("AUDIO_FORMAT", "ALWAYS_REPEAT", "COLUMNS", "HISTORY", "SHOW_VIDEO")
+ALLOWED = ("AUDIO_FORMAT", "ALWAYS_REPEAT", "COLUMNS", "HISTORY", "SHOW_VIDEO", "MAX_RES", "VIDEO_FORMAT")
 SHOWN = ("ENCODER",) + ALLOWED
 DEFAULTS = {"SHOW_VIDEO": False}
 
@@ -24,6 +24,8 @@ def help_topic():
          (valid: views comments rating date time user likes dislikes category ytid)
     {2}set history true|false{1} - record play history
     {2}set show_video true|false{1} - show the video above the terminal (audio only if false)
+    {2}set max_res <number>{1} - maximum video height to play, e.g. 480 or 720
+    {2}set video_format <auto|mp4|webm|3gp>{1} - preferred video format for playback
 
     Use {2}1{1} and {2}0{1} in place of true and false.
     Add {2}-a{1} or {2}-w{1} after a selection to play it only this time as audio or with video,
