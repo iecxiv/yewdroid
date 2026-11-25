@@ -27,7 +27,8 @@ def install():
     from mps_youtube import config, g, helptext
     from mps_youtube.commands import Command, config as config_commands, lastfm
     from android_encode import install as install_encode
-    from android_encoder_editor import help_topic as editor_help, install as install_editor
+    from android_encoder_editor import install as install_editor
+    from android_encoder_defaults import help_topic as editor_help
     if getattr(g, "_android_features_installed", False):
         return
 
