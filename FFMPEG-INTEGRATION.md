@@ -1,32 +1,40 @@
-# Preparación de FFmpeg + LAME para YewDroid
+# Integración de FFmpeg + LAME en YewDroid
 
-Este kit es una primera etapa de integración, NO una integración terminada ni una APK.
+La compilación y el empaquetado están conectados opcionalmente a Gradle. La ejecución nativa no está validada; las descargas y encode todavía no usan este backend.
 
-## Contenido
+## Activar la compilación
 
-- tools/build-ffmpeg-android.sh: compilación cruzada Linux/NDK para arm64-v8a y x86_64, API 26, FFmpeg CLI y ffprobe, con LAME, sin GPL opcional ni nonfree.
-- app/src/main/python/android_ffmpeg.py: adaptador de ejecución por lista de argumentos, unión sin recodificar y conversión MP3 explícita. Todavía no está conectado a los comandos.
-
-## Preparar y compilar
-
-Usar copias revisadas y versionadas de las fuentes FFmpeg y LAME, con configure incluido. No apuntar a un checkout que cambie silenciosamente. Registrar versión, origen y SHA-256 de los paquetes fuente antes de compilar. No se han seleccionado ni descargado aquí esos paquetes.
+Sin enableFfmpeg la app conserva su compilación actual y no incluye los binarios generados de FFmpeg, aunque existan de una compilación anterior. Para incluirlos, usar una instalación de Gradle compatible o las opciones equivalentes de Android Studio:
 
 ```sh
-export ANDROID_NDK_HOME=/ruta/al/ndk
-export FFMPEG_SOURCE=/ruta/a/ffmpeg-extraido
-export LAME_SOURCE=/ruta/a/lame-extraido
-bash tools/build-ffmpeg-android.sh
+gradle :app:assembleDebug \
+  -PenableFfmpeg=true \
+  -PffmpegSource=/ruta/a/ffmpeg-extraido \
+  -PlameSource=/ruta/a/lame-extraido \
+  -PffmpegNdk=/ruta/al/ndk
 ```
 
-La compilación usa herramientas del host Linux, make y Python 3. Por diseño FFmpeg no tiene red: yt-dlp debe descargar localmente antes de unir/convertir.
+También se admiten FFMPEG_SOURCE, LAME_SOURCE y ANDROID_NDK_HOME, manteniendo -PenableFfmpeg=true. Las rutas relativas se resuelven respecto a la raíz del proyecto. Las fuentes deben contener configure. Seleccionar y registrar versiones y SHA-256 concretos antes de distribuir; esta configuración no descarga ni fija las fuentes.
 
-## Conexiones pendientes
+La tarea buildFfmpeg ejecuta tools/build-ffmpeg-android.sh antes de preBuild. Sin rutas válidas, la compilación activada falla con un mensaje explícito; no se omite FFmpeg silenciosamente. El script requiere host Linux x86_64, make, Python 3 y NDK. Genera ffmpeg/ffprobe para arm64-v8a y x86_64, API 26, con libmp3lame, sin enable-gpl ni enable-nonfree. FFmpeg tiene la red deshabilitada: yt-dlp descargará antes de convertir.
 
-1. Añadir a Gradle generated/ffmpeg/jniLibs y generated/ffmpeg/assets, depender de esta tarea en preBuild y conservar los ejecutables empaquetados; comprobar su extracción y permisos.
-2. Ejecutar ambos binarios en Android y comprobar soporte libmp3lame, ABI, dependencias ELF y alineación 16 KB. El flag de enlace no es una validación de dispositivo.
-3. Conectar la unión al recorrido de descarga, preferiblemente con MKV para evitar forzar MP4 incompatible. Mantener da sin conversión automática.
-4. No pasar nativeLibraryDir directamente como ffmpeg_location: los nombres libffmpeg.so/libffprobe.so no son los nombres ffmpeg/ffprobe esperados por yt-dlp. Hay que adaptar explícitamente ese descubrimiento o invocar este backend desde los comandos.
-5. Revisar android_features.py: encode y sus ayudas están bloqueados, y ENCODER se fuerza a cero. Crear un menú Android explícito de conversión antes de desbloquearlo. No prometer perfiles de códecs no compilados.
-6. Conservar fuentes completas de FFmpeg/LAME, configuración, parches, licencias y mecanismo de sustitución o reenlace aplicable a LGPL. Las copias parciales de COPYING no certifican cumplimiento completo.
+## Empaquetado
 
-La sintaxis del script y del adaptador se ha comprobado. No se ha ejecutado la compilación nativa, integrado Gradle, habilitado encode ni publicado cambios en GitHub.
+Con la opción activada, Gradle añade generated/ffmpeg/jniLibs y generated/ffmpeg/assets y conserva libffmpeg.so/libffprobe.so sin el paso de eliminación de símbolos. La configuración existente usa empaquetado legado. Deben verificarse la extracción efectiva, permisos, dependencias ELF, ejecución y alineación de 16 KB en Android. No se ha compilado ni probado esta conexión.
+
+## Backend Python
+
+app/src/main/python/android_ffmpeg.py busca los ejecutables en nativeLibraryDir. Permite unión sin recodificar y conversión MP3 explícita a 128, 192, 256 o 320 kbps. No sobrescribe archivos y ejecuta listas de argumentos sin shell. Los comandos todavía no lo llaman.
+
+No pasar nativeLibraryDir directamente a ffmpeg_location: libffmpeg.so y libffprobe.so no tienen los nombres ffmpeg y ffprobe esperados por yt-dlp. Hay que adaptar el descubrimiento o usar el backend explícito.
+
+## Pendiente
+
+- Seleccionar y verificar las versiones de fuentes y probar la compilación cruzada.
+- Verificar ambos ejecutables en un dispositivo y soporte libmp3lame.
+- Conectar la unión al recorrido de descarga, sin forzar MP4 para códecs incompatibles.
+- Crear y conectar el menú encode; android_features.py aún bloquea encode y fuerza ENCODER a cero.
+- Mantener da como descarga del audio original, sin conversión automática.
+- Conservar las fuentes completas, configuración, parches, avisos y mecanismo de sustitución o reenlace aplicable a LGPL. Las copias de COPYING no certifican cumplimiento completo.
+
+No se actualizan las dependencias existentes. La conexión de Gradle no significa que encode o la unión mediante FFmpeg estén habilitados.

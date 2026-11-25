@@ -5,6 +5,11 @@ plugins {
     id("com.chaquo.python")
 }
 
+val enableFfmpeg = providers.gradleProperty("enableFfmpeg").map { it.toBooleanStrict() }.getOrElse(false)
+val ffmpegSource = providers.gradleProperty("ffmpegSource").orElse(providers.environmentVariable("FFMPEG_SOURCE"))
+val lameSource = providers.gradleProperty("lameSource").orElse(providers.environmentVariable("LAME_SOURCE"))
+val ffmpegNdk = providers.gradleProperty("ffmpegNdk").orElse(providers.environmentVariable("ANDROID_NDK_HOME"))
+
 android {
     namespace = "iecxiv.yewdroid"
     compileSdk = 35
@@ -25,11 +30,18 @@ android {
     sourceSets.getByName("main") {
         jniLibs.srcDir(layout.buildDirectory.dir("generated/quickjs/jniLibs"))
         assets.srcDir(layout.buildDirectory.dir("generated/quickjs/assets"))
+        if (enableFfmpeg) {
+            jniLibs.srcDir(layout.buildDirectory.dir("generated/ffmpeg/jniLibs"))
+            assets.srcDir(layout.buildDirectory.dir("generated/ffmpeg/assets"))
+        }
     }
     packaging {
         jniLibs {
             useLegacyPackaging = true
             keepDebugSymbols += "**/libqjs.so"
+            if (enableFfmpeg) {
+                keepDebugSymbols += listOf("**/libffmpeg.so", "**/libffprobe.so")
+            }
         }
     }
 }
@@ -45,6 +57,33 @@ val buildQuickJs by tasks.registering(Exec::class) {
     }
 }
 tasks.named("preBuild") { dependsOn(buildQuickJs) }
+
+if (enableFfmpeg) {
+    val buildFfmpeg by tasks.registering(Exec::class) {
+        group = "build"
+        description = "Build Android FFmpeg and ffprobe with LAME from supplied sources"
+        workingDir(rootProject.projectDir)
+        commandLine("bash", rootProject.file("tools/build-ffmpeg-android.sh").absolutePath)
+        doFirst {
+            val ffmpeg = ffmpegSource.orNull ?: throw GradleException("Define -PffmpegSource o FFMPEG_SOURCE")
+            val lame = lameSource.orNull ?: throw GradleException("Define -PlameSource o LAME_SOURCE")
+            val ndk = ffmpegNdk.orNull ?: throw GradleException("Define -PffmpegNdk o ANDROID_NDK_HOME")
+            val ffmpegDir = rootProject.file(ffmpeg)
+            val lameDir = rootProject.file(lame)
+            val ndkDir = rootProject.file(ndk)
+            if (!ffmpegDir.resolve("configure").isFile || !lameDir.resolve("configure").isFile) {
+                throw GradleException("FFmpeg y LAME requieren fuentes extraidas con configure")
+            }
+            if (!ndkDir.resolve("toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar").isFile) {
+                throw GradleException("NDK Linux no valido para el script FFmpeg")
+            }
+            environment("FFMPEG_SOURCE", ffmpegDir.absolutePath)
+            environment("LAME_SOURCE", lameDir.absolutePath)
+            environment("ANDROID_NDK_HOME", ndkDir.absolutePath)
+        }
+    }
+    tasks.named("preBuild") { dependsOn(buildFfmpeg) }
+}
 
 chaquopy {
     defaultConfig {
