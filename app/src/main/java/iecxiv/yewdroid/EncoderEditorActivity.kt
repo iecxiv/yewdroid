@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.text.InputFilter
 import android.text.InputType
 import android.view.Gravity
+import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -54,6 +55,7 @@ class EncoderEditorActivity : ComponentActivity() {
             textSize = 13f
             gravity = Gravity.TOP or Gravity.START
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            imeOptions = imeOptions or EditorInfo.IME_FLAG_NO_FULLSCREEN
             setHorizontallyScrolling(true)
             setTextColor(Color.WHITE)
             setBackgroundColor(Color.rgb(24, 24, 24))
