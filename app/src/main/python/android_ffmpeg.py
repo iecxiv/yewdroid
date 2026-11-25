@@ -10,7 +10,7 @@ def binaries():
     result = tuple(os.path.join(directory, name) for name in ("libffmpeg.so", "libffprobe.so"))
     for path in result:
         if not os.path.isfile(path) or not os.access(path, os.X_OK):
-            raise RuntimeError("FFmpeg no esta empaquetado o no es ejecutable: " + path)
+            raise RuntimeError("FFmpeg is not packaged or not executable: " + path)
     return result
 
 
@@ -25,5 +25,5 @@ def merge(video, audio, output):
 
 def encode_mp3(source, output, bitrate=192):
     if bitrate not in (128, 192, 256, 320):
-        raise ValueError("Bitrate MP3 no admitido")
+        raise ValueError("MP3 bitrate not supported")
     run(["-i", source, "-map", "0:a:0", "-vn", "-c:a", "libmp3lame", "-b:a", str(bitrate) + "k", output])

@@ -8,7 +8,7 @@ import tempfile
 def _publish(path):
     from java import jclass
     if jclass("android.os.Build$VERSION").SDK_INT < 29:
-        print("Aviso: Android 8/9 conserva el destino anterior; no se exporto a Descargas publicas.")
+        print("Note: Android 8/9 keeps the previous destination; the file was not exported to public Downloads.")
         return os.path.abspath(path)
     app = jclass("com.chaquo.python.Python").getPlatform().getApplication()
     return str(jclass("iecxiv.yewdroid.DownloadPublisher").publish(app, path))
@@ -26,7 +26,7 @@ def download_video(ytid, folder, hook):
     url = "https://www.youtube.com/watch?v=%s" % ytid
     try:
         def fetch(label, selector):
-            print("\n[descarga] %s" % label)
+            print("\n[download] %s" % label)
             opts = {
                 "outtmpl": os.path.join(work, label + ".%(ext)s"),
                 "format": selector,
@@ -38,15 +38,15 @@ def download_video(ytid, folder, hook):
                 "hls_prefer_native": True,
                 "postprocessors": [],
                 "match_filter": lambda info, *, incomplete=False: (
-                    "No se admiten emisiones en directo" if info.get("is_live") else None),
+                    "Live streams are not supported" if info.get("is_live") else None),
             }
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=True)
                 if not info:
-                    raise RuntimeError("No se recibieron datos de %s" % label)
+                    raise RuntimeError("No data received for %s" % label)
                 path = ydl.prepare_filename(info)
             if not os.path.isfile(path) or os.path.getsize(path) == 0:
-                raise RuntimeError("Pista incompleta: %s" % label)
+                raise RuntimeError("Incomplete track: %s" % label)
             return info, path
 
         vi, video = fetch("video", "bv[ext=mp4][vcodec^=avc1]")
@@ -56,26 +56,26 @@ def download_video(ytid, folder, hook):
         output = os.path.join(work, "%s-%s.mp4" % (title, safe_id))
         # Track filenames must remain distinct even for a pathological title/id.
         if output in (video, audio):
-            output = os.path.join(work, "resultado.mp4")
-        print("\n[descarga] Uniendo video y audio sin recodificar...")
+            output = os.path.join(work, "result.mp4")
+        print("\n[download] Merging video and audio without re-encoding...")
         muxer.merge(video, audio, output)
         if not os.path.isfile(output) or os.path.getsize(output) == 0:
-            raise RuntimeError("El multiplexador no genero un MP4 valido")
-        print("[descarga] Exportando a Descargas publicas...")
+            raise RuntimeError("The muxer did not produce a valid MP4")
+        print("[download] Exporting to public Downloads...")
         destination = _publish(output)
         # On Android 8/9 the local output is the final file: do not delete it.
         if destination == os.path.abspath(output):
-            print("\nGuardado local: %s" % destination)
+            print("\nSaved locally: %s" % destination)
             return destination
     except BaseException as exc:
-        message = "Descarga/exportacion de video interrumpida. Archivos conservados en: %s" % work
+        message = "Video download/export interrupted. Files kept in: %s" % work
         print(message)
         if isinstance(exc, Exception):
             raise RuntimeError("%s\n%s" % (exc, message)) from exc
         raise
     else:
         shutil.rmtree(work, ignore_errors=True)
-        print("\nGuardado: %s" % destination)
+        print("\nSaved: %s" % destination)
         return destination
 
 
@@ -98,7 +98,7 @@ def install(pafy):
             if data.get("status") == "downloading":
                 total = data.get("total_bytes") or data.get("total_bytes_estimate") or 0
                 if total:
-                    sys.stdout.write("\r  Descargando %.1f%%   " % (
+                    sys.stdout.write("\r  Downloading %.1f%%   " % (
                         100.0 * data.get("downloaded_bytes", 0) / total))
                     sys.stdout.flush()
         return download_video(ytid, folder, hook)

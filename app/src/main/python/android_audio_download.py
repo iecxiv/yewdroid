@@ -48,10 +48,10 @@ def download_audio(ytid, folder, publish):
         preferred = [fmt for fmt in audio if fmt.get("ext") == "m4a"]
         candidates = preferred or audio
         if not candidates:
-            raise RuntimeError("No hay una pista de audio descargable en esta extraccion")
+            raise RuntimeError("No downloadable audio track in this extraction")
         chosen = candidates[-1]
         report["selected_format"] = chosen.get("format_id")
-        print("[audio] Formato %s (%s)" % (chosen.get("format_id"), chosen.get("ext")))
+        print("[audio] Format %s (%s)" % (chosen.get("format_id"), chosen.get("ext")))
         yield chosen
 
     def progress(data):
@@ -75,25 +75,25 @@ def download_audio(ytid, folder, publish):
         "fragment_retries": 3,
         "socket_timeout": 25,
         "match_filter": lambda info, *, incomplete=False: (
-            "No se admiten emisiones en directo" if info.get("is_live") else None),
+            "Live streams are not supported" if info.get("is_live") else None),
     }
     try:
         with yt_dlp.YoutubeDL(options) as ydl:
             report["js_runtimes"] = list((ydl.params.get("js_runtimes") or {}).keys())
             info = ydl.extract_info("https://www.youtube.com/watch?v=%s" % ytid, download=True)
             if not info or info.get("vcodec") != "none" or info.get("acodec") in (None, "none"):
-                raise RuntimeError("El resultado no es una pista exclusivamente de audio")
+                raise RuntimeError("The result is not an audio-only track")
             requested = info.get("requested_downloads") or []
             path = (requested[0].get("filepath") if requested else None) or ydl.prepare_filename(info)
         path = os.path.abspath(path)
         if os.path.commonpath([os.path.realpath(work), os.path.realpath(path)]) != os.path.realpath(work):
-            raise RuntimeError("Ruta de audio inesperada")
+            raise RuntimeError("Unexpected audio path")
         if not os.path.isfile(path) or os.path.getsize(path) == 0:
-            raise RuntimeError("Archivo de audio ausente o vacio")
-        print("\n[audio] Exportando archivo terminado...")
+            raise RuntimeError("Audio file is missing or empty")
+        print("\n[audio] Exporting finished file...")
         destination = publish(path)
         if not isinstance(destination, str) or not destination:
-            raise RuntimeError("La exportacion no confirmo el destino")
+            raise RuntimeError("The export did not confirm the destination")
     except BaseException as error:
         report["error"] = _clean(error)
         report["warnings"] = list(warnings)
@@ -102,10 +102,10 @@ def download_audio(ytid, folder, publish):
             with open(diagnostic, "w", encoding="utf-8") as handle:
                 json.dump(report, handle, ensure_ascii=False, indent=2)
         except OSError:
-            diagnostic = "No se pudo escribir el diagnostico"
-        message = "%s\nArchivos conservados: %s\nDiagnostico: %s" % (_clean(error), work, diagnostic)
+            diagnostic = "Could not write the diagnostic"
+        message = "%s\nFiles kept: %s\nDiagnostic: %s" % (_clean(error), work, diagnostic)
         if warnings:
-            message += "\nAvisos del mismo intento:\n" + "\n".join(list(warnings)[-4:])
+            message += "\nWarnings from the same attempt:\n" + "\n".join(list(warnings)[-4:])
         if isinstance(error, Exception):
             raise RuntimeError(message) from error
         print(message)
@@ -113,5 +113,5 @@ def download_audio(ytid, folder, publish):
     else:
         if destination != path:
             shutil.rmtree(work, ignore_errors=True)
-        print("Guardado: %s" % destination)
+        print("Saved: %s" % destination)
         return destination

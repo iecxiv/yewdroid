@@ -12,7 +12,7 @@ class DownloadCancelled(Exception):
 def kind(fmt):
     video = fmt.get("vcodec") not in (None, "none")
     audio = fmt.get("acodec") not in (None, "none")
-    return "video+audio" if video and audio else "video" if video else "audio" if audio else "otro"
+    return "video+audio" if video and audio else "video" if video else "audio" if audio else "other"
 
 
 def can_mux(video, audio):
@@ -29,13 +29,13 @@ def ffmpeg_ready():
     for path in paths:
         result = subprocess.run([path, "-version"], capture_output=True, text=True, timeout=15)
         if result.returncode != 0:
-            raise RuntimeError("El binario FFmpeg empaquetado no arranca: " + os.path.basename(path))
+            raise RuntimeError("The bundled FFmpeg binary does not start: " + os.path.basename(path))
     return True
 
 
 def choose(rows, title, ffmpeg=False):
     from mps_youtube import g, screen
-    lines = [title, "N  ID  Tipo  Extension  Calidad  Codec video / audio  Tamaño aprox."]
+    lines = [title, "N  ID  Type  Extension  Quality  Video / audio codec  Approx. size"]
     for number, fmt in enumerate(rows, 1):
         size = fmt.get("filesize") or fmt.get("filesize_approx")
         size = "%.1f MiB" % (size / 1048576) if size else "?"
@@ -43,45 +43,45 @@ def choose(rows, title, ffmpeg=False):
         lines.append("%d  %s  %s  %s  %s  %s / %s  %s" % (
             number, fmt.get("format_id"), kind(fmt), fmt.get("ext"), quality,
             fmt.get("vcodec"), fmt.get("acodec"), size))
-    note = "FFmpeg: union a MKV sin recodificar; depende del soporte de la compilacion." if ffmpeg else "Sin FFmpeg: union solo MP4/H.264 + M4A/AAC."
-    lines += ["", note, "Enter cancela sin descargar."]
+    note = "FFmpeg: merges into MKV without re-encoding; depends on the build's support." if ffmpeg else "Without FFmpeg: merges only MP4/H.264 + M4A/AAC."
+    lines += ["", note, "Enter cancels without downloading."]
     g.content = "\n".join(lines)
     screen.update()
     while True:
-        answer = input("Formato (numero de fila): ").strip()
+        answer = input("Format (row number): ").strip()
         if not answer:
             raise DownloadCancelled()
         if answer.isdigit() and 1 <= int(answer) <= len(rows):
             return rows[int(answer) - 1]
-        print("Seleccion fuera de rango.")
+        print("Selection out of range.")
 
 
 def plan(ydl, info, mode, ffmpeg=False):
     rows = [fmt for fmt in info.get("formats", []) if fmt.get("url")
-            and not fmt.get("has_drm") and kind(fmt) != "otro"]
+            and not fmt.get("has_drm") and kind(fmt) != "other"]
     if not rows:
-        raise RuntimeError("No hay formatos descargables en esta extraccion")
+        raise RuntimeError("No downloadable formats in this extraction")
     if mode in ("d", "dl", "download"):
         selected = choose(rows, str(info.get("title") or info.get("id")), ffmpeg)
         if kind(selected) != "video":
             return [selected]
         audio = [fmt for fmt in rows if kind(fmt) == "audio" and (ffmpeg or can_mux(selected, fmt))]
         if not audio:
-            raise RuntimeError("No hay audio compatible con el backend disponible; no se descargo nada")
-        return [selected, choose(audio, "Selecciona el audio para unir al video", ffmpeg)]
+            raise RuntimeError("No audio compatible with the available backend; nothing was downloaded")
+        return [selected, choose(audio, "Select the audio to merge with the video", ffmpeg)]
     selector = "ba" if mode.startswith("da") else "bv*+ba/b"
     selections = list(ydl.build_format_selector(selector)({"formats": rows, "incomplete_formats": False, "has_merged_format": any(kind(fmt) == "video+audio" for fmt in rows)}))
     if not selections:
-        raise RuntimeError("No hay formato disponible para " + selector)
+        raise RuntimeError("No format available for " + selector)
     selected = selections[0]
     tracks = selected.get("requested_formats") or [selected]
     if mode.startswith("da") and any(kind(fmt) != "audio" for fmt in tracks):
-        raise RuntimeError("El mejor formato no es exclusivamente de audio")
+        raise RuntimeError("The best format is not audio-only")
     if len(tracks) > 1:
         if len(tracks) != 2 or kind(tracks[0]) != "video" or kind(tracks[1]) != "audio":
-            raise RuntimeError("Combinacion de pistas no admitida")
+            raise RuntimeError("Unsupported track combination")
         if not ffmpeg and not can_mux(tracks[0], tracks[1]):
-            raise RuntimeError("El mejor video/audio requiere FFmpeg. Sin FFmpeg solo se une MP4/H.264 + M4A/AAC; no se descargo nada ni se eligio una calidad inferior")
+            raise RuntimeError("The best video/audio requires FFmpeg. Without FFmpeg only MP4/H.264 + M4A/AAC can be merged; nothing was downloaded and no lower quality was chosen")
     return tracks
 
 
@@ -97,7 +97,7 @@ def download(ytid, folder, mode):
     with yt_dlp.YoutubeDL(options) as ydl:
         info = ydl.extract_info(url, download=False)
         if not info or info.get("is_live"):
-            raise RuntimeError("No se admiten emisiones en directo o extracciones vacias")
+            raise RuntimeError("Live streams and empty extractions are not supported")
         tracks = plan(ydl, info, mode, ffmpeg)
     profile = None
     delete_original = True
@@ -107,7 +107,7 @@ def download(ytid, folder, mode):
             validate(selected)
             profile = selected
         elif selected.get("ext") != "COPY":
-            print("[encode] El perfil no admite esta extension; se conserva el original.")
+            print("[encode] The profile does not support this extension; keeping the original.")
     os.makedirs(folder, exist_ok=True)
     work = tempfile.mkdtemp(prefix=".yewdroid-choice-", dir=folder)
     try:
@@ -116,61 +116,61 @@ def download(ytid, folder, mode):
             if data.get("status") == "downloading":
                 total = data.get("total_bytes") or data.get("total_bytes_estimate")
                 if total:
-                    print("\r  Descargando %.1f%%" % (100 * data.get("downloaded_bytes", 0) / total), end="", flush=True)
+                    print("\r  Downloading %.1f%%" % (100 * data.get("downloaded_bytes", 0) / total), end="", flush=True)
         for index, track in enumerate(tracks):
             format_id = str(track["format_id"])
-            print("\n[descarga] Formato %s (%s)" % (format_id, track.get("ext")))
+            print("\n[download] Format %s (%s)" % (format_id, track.get("ext")))
             def exact(ctx, wanted=format_id):
                 matches = [fmt for fmt in ctx.get("formats", []) if str(fmt.get("format_id")) == wanted
                            and fmt.get("url") and not fmt.get("has_drm")]
                 if not matches:
-                    raise RuntimeError("El formato elegido ya no esta disponible; no se sustituye por otro")
+                    raise RuntimeError("The chosen format is no longer available; it will not be replaced by another")
                 yield matches[-1]
             opts = dict(options, format=exact, progress_hooks=[progress],
                         outtmpl=os.path.join(work, str(index) + "-%(title).100B-%(id)s.%(ext)s"))
             with yt_dlp.YoutubeDL(opts) as ydl:
                 result = ydl.extract_info(url, download=True)
                 if not result or result.get("is_live"):
-                    raise RuntimeError("No se recibio la pista elegida")
+                    raise RuntimeError("The chosen track was not received")
                 if str(result.get("format_id")) != format_id or kind(result) != kind(track):
-                    raise RuntimeError("La pista descargada no coincide con la seleccion")
+                    raise RuntimeError("The downloaded track does not match the selection")
                 requests = result.get("requested_downloads") or []
                 path = (requests[0].get("filepath") if requests else None) or ydl.prepare_filename(result)
             if os.path.commonpath([os.path.realpath(work), os.path.realpath(path)]) != os.path.realpath(work):
-                raise RuntimeError("Ruta de descarga inesperada")
+                raise RuntimeError("Unexpected download path")
             if not os.path.isfile(path) or os.path.getsize(path) == 0:
-                raise RuntimeError("Archivo descargado ausente o vacio")
+                raise RuntimeError("Downloaded file is missing or empty")
             if profile and not accepts(profile, os.path.splitext(path)[1].lstrip(".")):
-                raise RuntimeError("La extension descargada ya no es compatible con el perfil")
+                raise RuntimeError("The downloaded extension is no longer compatible with the profile")
             paths.append(path)
         output = paths[0]
         if len(paths) == 2:
             extension = ".mkv" if ffmpeg else ".mp4"
-            output = os.path.splitext(paths[0])[0] + "-con-audio" + extension
-            print("\n[descarga] Uniendo video y audio sin recodificar...")
+            output = os.path.splitext(paths[0])[0] + "-with-audio" + extension
+            print("\n[download] Merging video and audio without re-encoding...")
             if ffmpeg:
                 from android_ffmpeg import merge
                 merge(paths[0], paths[1], output)
             else:
                 from java import jclass
                 if not can_mux(tracks[0], tracks[1]):
-                    raise RuntimeError("Pistas incompatibles con el multiplexador")
+                    raise RuntimeError("Tracks are incompatible with the muxer")
                 jclass("iecxiv.yewdroid.Mp4Muxer").merge(paths[0], paths[1], output)
         if profile:
             output = apply_profile(output, profile)
         if not os.path.isfile(output) or os.path.getsize(output) == 0:
-            raise RuntimeError("Archivo final ausente o vacio")
+            raise RuntimeError("Final file is missing or empty")
         destination = _publish(output)
         if not isinstance(destination, str) or not destination:
-            raise RuntimeError("La exportacion no confirmo el destino")
+            raise RuntimeError("The export did not confirm the destination")
     except BaseException:
-        print("\nDescarga interrumpida. Archivos conservados: " + work)
+        print("\nDownload interrupted. Files kept: " + work)
         raise
     if profile and not delete_original:
-        print("[encode] Original conservado localmente: " + paths[0])
+        print("[encode] Original kept locally: " + paths[0])
     elif destination != os.path.abspath(output):
         shutil.rmtree(work, ignore_errors=True)
     elif profile and delete_original and paths[0] != output:
         os.unlink(paths[0])
-    print("\nGuardado: " + destination)
+    print("\nSaved: " + destination)
     return destination
