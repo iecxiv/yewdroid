@@ -24,7 +24,7 @@ def help_topic():
          (valid: views comments rating date time user likes dislikes category ytid)
     {2}set history true|false{1} - record play history
     {2}set show_video true|false{1} - show the video above the terminal (audio only if false)
-    {2}set max_res <number>{1} - maximum video height to play, e.g. 480 or 720
+    {2}set max_res <360-2160>{1} - maximum video height to play, e.g. 360 or 720
     {2}set video_format <auto|mp4|webm|3gp>{1} - preferred video format for playback
 
     Use {2}1{1} and {2}0{1} in place of true and false.
