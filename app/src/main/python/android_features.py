@@ -5,7 +5,7 @@ import sys
 REMOVED = frozenset("dl-command encode invoke config lastfm tips new changelog tor".split())
 CONFIG_ALIASES = frozenset((
     "config set showconfig configuration configure settings columns audio default reset "
-    "max_res video_format quality resolution search_music order user_order"
+    "max_res video_format quality resolution order"
 ).split())
 HELP_ALIASES = frozenset((
     "dlcmd dl-cmd download-cmd dl_cmd download_cmd download-command download_command "
@@ -55,6 +55,7 @@ def install():
     from android_encode import install as install_encode
     from android_encoder_editor import install as install_editor
     from android_encoder_defaults import help_topic as editor_help
+    from android_search import install as install_search
     if getattr(g, "_android_features_installed", False):
         return
 
@@ -139,4 +140,5 @@ def install():
     install_config()
     install_encode()
     install_editor()
+    install_search()
     g._android_features_installed = True
