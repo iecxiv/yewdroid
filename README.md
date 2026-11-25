@@ -23,7 +23,7 @@ Identificador y namespace: `iecxiv.yewdroid`.
 ### Comandos básicos
 
 ```text
-/canta con blippi   Buscar vídeos
+/search-term        Buscar vídeos
 1                  Reproducir el primer resultado
 open nombre        Abrir una playlist local por nombre
 open ID            Abrir una playlist local por ID
@@ -81,7 +81,7 @@ Application ID and namespace: `iecxiv.yewdroid`.
 ### Basic commands
 
 ```text
-/canta con blippi   Search for videos
+/search-term        Search for videos
 1                  Play the first result
 open name          Open a local playlist by name
 open ID            Open a local playlist by ID
