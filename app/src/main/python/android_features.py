@@ -27,6 +27,7 @@ def install():
     from mps_youtube import config, g, helptext
     from mps_youtube.commands import Command, config as config_commands, lastfm
     from android_encode import install as install_encode
+    from android_encoder_editor import help_topic as editor_help, install as install_editor
     if getattr(g, "_android_features_installed", False):
         return
 
@@ -45,10 +46,13 @@ def install():
                 body = "\n".join(line for line in body.split("\n")
                                  if not re.match(r"\s*set(?:\s|$)", ANSI.sub("", line)))
                 result.append((name, title, body))
+        result.append(editor_help())
         return result
 
     def get_help(choice=None):
         name = (choice or "").strip().lower()
+        if name in ("edit-encoders", "edit_encoders", "edit encoders"):
+            return original_help("edit-encoders")
         if name in ("encode", "encoder", "encoders", "encoding", "mp3", "wma", "format", "transcode", "transcoding"):
             return original_help("encode")
         if name in REMOVED or name in HELP_ALIASES:
@@ -103,4 +107,5 @@ def install():
     config.load = load
     enforce()
     install_encode()
+    install_editor()
     g._android_features_installed = True
