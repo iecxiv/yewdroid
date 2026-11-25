@@ -16,11 +16,11 @@ object AndroidLinks {
 
     @JvmStatic
     fun perform(context: Context, action: String, url: String): String {
-        require(action == "open" || action == "share") { "Accion no admitida" }
+        require(action == "open" || action == "share") { "Unsupported action" }
         val uri = Uri.parse(url)
         require(uri.scheme == "https" && uri.host == "www.youtube.com" &&
             uri.userInfo == null && (uri.port == -1 || uri.port == 443) &&
-            uri.path in setOf("/watch", "/playlist")) { "Enlace de YouTube no valido" }
+            uri.path in setOf("/watch", "/playlist")) { "Invalid YouTube link" }
         val intent = if (action == "open") {
             Intent(Intent.ACTION_VIEW, uri)
         } else {
@@ -28,24 +28,24 @@ object AndroidLinks {
                 type = "text/plain"
                 putExtra(Intent.EXTRA_TEXT, url)
             }
-            Intent.createChooser(send, "Compartir enlace de YewDroid")
+            Intent.createChooser(send, "Share YewDroid link")
         }
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         val task = FutureTask<String> {
             try {
                 context.applicationContext.startActivity(intent)
             } catch (error: ActivityNotFoundException) {
-                throw IllegalStateException("No hay una aplicacion compatible para esta accion", error)
+                throw IllegalStateException("No compatible app for this action", error)
             }
-            if (action == "open") "Solicitud de apertura enviada a Android."
-            else "Selector de compartir solicitado. El envio se confirma en la app elegida."
+            if (action == "open") "Open request sent to Android."
+            else "Share chooser requested. Sending is confirmed in the app you choose."
         }
         if (Looper.myLooper() == Looper.getMainLooper()) task.run()
-        else check(main.post(task)) { "No se pudo solicitar la accion a Android" }
+        else check(main.post(task)) { "Could not request the action from Android" }
         try {
             return task.get(5, TimeUnit.SECONDS)
         } catch (error: ExecutionException) {
-            throw IllegalStateException(error.cause?.message ?: "La accion Android fallo", error.cause)
+            throw IllegalStateException(error.cause?.message ?: "The Android action failed", error.cause)
         } catch (error: Exception) {
             task.cancel(false)
             if (error is InterruptedException) Thread.currentThread().interrupt()

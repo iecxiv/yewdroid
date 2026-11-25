@@ -116,7 +116,7 @@ fun TerminalScreen() {
     }
     if (currentZoom == null || savedHistory == null) {
         Box(Modifier.fillMaxSize().background(BG).systemBarsPadding(), contentAlignment = Alignment.Center) {
-            Text("Cargando terminal...", style = uiStyle)
+            Text("Loading terminal...", style = uiStyle)
         }
         return
     }

@@ -92,10 +92,10 @@ def install():
             if not selected and not video:
                 selected = streams.select(choices, audio=False)
             if not selected or not selected.get("url"):
-                raise ValueError("No hay un stream reproducible para precargar")
+                raise ValueError("No playable stream to preload")
             # Do not probe Content-Length: Media3 does not need it to preload.
         except Exception as error:
-            _record("precarga", song, error)
+            _record("preload", song, error)
         finally:
             _local.playback = old_context
             if registered:
@@ -109,10 +109,10 @@ def install():
         try:
             result = original_details(song, *args, **kwargs)
             if not result or len(result) != 3 or not result[1] or not result[1].get("url"):
-                raise ValueError(g.message or "No hay un stream reproducible")
+                raise ValueError(g.message or "No playable stream")
             return result
         except Exception as error:
-            _record("extraccion", song, error)
+            _record("extraction", song, error)
             return False, _FailedStream(error), kwargs.get("override", False)
         finally:
             _local.playback = old_context
@@ -120,7 +120,7 @@ def install():
     def skip(self, position, error):
         reason = " ".join(_clean(error).split())[-240:]
         title = " ".join(_clean(self.song.title).split())[:100]
-        message = "Omitido: %s — %s" % (title, reason)
+        message = "Skipped: %s — %s" % (title, reason)
         g.message = message
         screen.writestatus(message)
         self.song_no = position + 1
@@ -129,7 +129,7 @@ def install():
             self.repeat = False
             self.softrepeat = False
             self.song_no = len(self.songlist)
-            raise _QueueExhausted("Cola detenida: ninguna pista se pudo reproducir. " + message)
+            raise _QueueExhausted("Queue stopped: no track could be played. " + message)
 
     def safe_playsong(self, *args, **kwargs):
         position = self.song_no
@@ -139,7 +139,7 @@ def install():
         try:
             result = original_playsong(self, *args, **kwargs)
         except Exception as error:
-            _record("reproduccion", self.song, error)
+            _record("playback", self.song, error)
             skip(self, position, error)
         else:
             self._android_consecutive_failures = 0

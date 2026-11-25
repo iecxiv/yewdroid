@@ -23,7 +23,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
 
-/** Interfaz que Python (yt_term.py) invoca. */
+/** Interface invoked by Python (yt_term.py). */
 interface TermSink {
     fun write(s: String)
     fun play(url: String, title: String, artist: String, thumb: String, lengthSec: Int)
@@ -31,7 +31,7 @@ interface TermSink {
     fun stopPlayback()
 }
 
-/** Clase publica y con nombre para que Chaquopy pueda llamarla desde Python. */
+/** Public named class so Chaquopy can call it from Python. */
 class HubSink : TermSink {
     override fun write(s: String) { TerminalHub.onWrite(s) }
     override fun play(url: String, title: String, artist: String, thumb: String, lengthSec: Int) {
@@ -94,7 +94,7 @@ object TerminalHub {
             scope.launch { tick() }
             for ((width, height) in sizes) {
                 runCatching { m.callAttr("resize", width, height) }.onFailure {
-                    onWrite("\n[terminal] No se pudo actualizar el tamano: ${it.message}\n")
+                    onWrite("\n[terminal] Could not update the size: ${it.message}\n")
                 }
             }
         }
@@ -126,7 +126,7 @@ object TerminalHub {
         main.post {
             val p = exo
             if (p == null) {
-                onWrite("\n\u001b[31m[player] servicio de reproduccion no disponible\u001b[0m\n")
+                onWrite("\n\u001b[31m[player] playback service unavailable\u001b[0m\n")
                 event("stop")
             } else {
                 val meta = MediaMetadata.Builder().setTitle(title).setArtist(artist)

@@ -65,17 +65,17 @@ if (enableFfmpeg) {
         workingDir(rootProject.projectDir)
         commandLine("bash", rootProject.file("tools/build-ffmpeg-android.sh").absolutePath)
         doFirst {
-            val ffmpeg = ffmpegSource.orNull ?: throw GradleException("Define -PffmpegSource o FFMPEG_SOURCE")
-            val lame = lameSource.orNull ?: throw GradleException("Define -PlameSource o LAME_SOURCE")
-            val ndk = ffmpegNdk.orNull ?: throw GradleException("Define -PffmpegNdk o ANDROID_NDK_HOME")
+            val ffmpeg = ffmpegSource.orNull ?: throw GradleException("Define -PffmpegSource or FFMPEG_SOURCE")
+            val lame = lameSource.orNull ?: throw GradleException("Define -PlameSource or LAME_SOURCE")
+            val ndk = ffmpegNdk.orNull ?: throw GradleException("Define -PffmpegNdk or ANDROID_NDK_HOME")
             val ffmpegDir = rootProject.file(ffmpeg)
             val lameDir = rootProject.file(lame)
             val ndkDir = rootProject.file(ndk)
             if (!ffmpegDir.resolve("configure").isFile || !lameDir.resolve("configure").isFile) {
-                throw GradleException("FFmpeg y LAME requieren fuentes extraidas con configure")
+                throw GradleException("FFmpeg and LAME require source trees extracted with configure")
             }
             if (!ndkDir.resolve("toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar").isFile) {
-                throw GradleException("NDK Linux no valido para el script FFmpeg")
+                throw GradleException("Invalid Linux NDK for the FFmpeg script")
             }
             environment("FFMPEG_SOURCE", ffmpegDir.absolutePath)
             environment("LAME_SOURCE", lameDir.absolutePath)

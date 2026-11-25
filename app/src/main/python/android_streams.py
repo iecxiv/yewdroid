@@ -82,7 +82,7 @@ def install():
                     and f.get("url") and not f.get("has_drm")]
         choices = preferred or audio or combined
         if not choices:
-            raise ValueError("No hay una pista con audio reproducible")
+            raise ValueError("No playable audio track")
         yield choices[-1]
 
     def get(song, force=False, callback=None, threeD=False):
@@ -98,7 +98,7 @@ def install():
                                         download=False)
             choices = _normalise(info or {})
             if not choices:
-                raise ValueError("La extraccion no devolvio streams compatibles con audio")
+                raise ValueError("The extraction returned no audio-compatible streams")
             g.streams[song.ytid] = {"expiry": _expiry(choices, now), "meta": choices}
             while len(g.streams) > max(1, getattr(g, "max_cached_streams", 50)):
                 g.streams.pop(next(iter(g.streams)))
