@@ -94,6 +94,14 @@ private fun resetConfig() {
     settingsModule().callAttr("reset")
 }
 
+/** The "keep the original audio" switch is stored by Python (android_dl_encode), next to the download code. */
+private fun loadKeepOriginal(): Boolean =
+    Python.getInstance().getModule("android_dl_encode").callAttr("keep_original").toBoolean()
+
+private fun saveKeepOriginal(value: Boolean) {
+    Python.getInstance().getModule("android_dl_encode").callAttr("set_keep_original", value)
+}
+
 /** Option key to its name and description. */
 private val LABELS = mapOf(
     "AUDIO_FORMAT" to (R.string.cfgui_audio_format to R.string.cfgui_audio_format_desc),
@@ -124,6 +132,7 @@ internal fun ConfigSettings(resumes: Int) {
     var editing by remember { mutableStateOf<ConfigOption?>(null) }
     var resetting by remember { mutableStateOf(false) }
     var reloads by remember { mutableIntStateOf(0) }
+    var keepOriginal by remember { mutableStateOf(false) }
 
     // The session must have finished starting (config loaded, presets read) before reading or writing.
     LaunchedEffect(client.ready, resumes, reloads) {
@@ -131,6 +140,7 @@ internal fun ConfigSettings(resumes: Int) {
             val result = withContext(Dispatchers.Default) { runCatching { loadConfig() } }
             state = result.getOrNull()
             failed = result.isFailure
+            keepOriginal = withContext(Dispatchers.Default) { runCatching { loadKeepOriginal() }.getOrDefault(false) }
         }
     }
 
@@ -139,6 +149,11 @@ internal fun ConfigSettings(resumes: Int) {
             withContext(Dispatchers.Default) { runCatching { saveConfig(key, value) } }
             reloads++
         }
+    }
+
+    fun changeKeepOriginal(value: Boolean) {
+        keepOriginal = value
+        scope.launch { withContext(Dispatchers.Default) { runCatching { saveKeepOriginal(value) } } }
     }
 
     val section = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp, color = ACCENT)
@@ -219,6 +234,36 @@ internal fun ConfigSettings(resumes: Int) {
                 if (preset.ext.isNotEmpty() && preset.ext != "COPY") Text(".${preset.ext}", style = note)
             }
         }
+    }
+    // Keeping the original only makes sense when a preset (not "None") converts the download.
+    val converting = current.encoders.firstOrNull { it.index == current.encoder }
+        ?.ext?.let { it.isNotEmpty() && it != "COPY" } == true
+    Row(
+        Modifier.fillMaxWidth()
+            .clickable(enabled = converting) { changeKeepOriginal(!keepOriginal) }
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                stringResource(R.string.cfgui_keep_original),
+                style = if (converting) body else body.copy(color = Color.Gray)
+            )
+            Text(stringResource(R.string.cfgui_keep_original_desc), style = note)
+        }
+        Switch(
+            checked = keepOriginal && converting,
+            onCheckedChange = null,
+            enabled = converting,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = BG,
+                checkedTrackColor = ACCENT,
+                checkedBorderColor = ACCENT,
+                uncheckedThumbColor = FG,
+                uncheckedTrackColor = Color(0xFF2A2A2A),
+                uncheckedBorderColor = Color(0xFF555555)
+            )
+        )
     }
     Row {
         TextButton(

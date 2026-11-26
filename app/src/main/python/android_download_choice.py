@@ -124,6 +124,7 @@ def download(ytid, folder, mode):
     import yt_dlp
     from android_video_download import _publish
     from android_encode import selected_profile, accepts, validate, apply_profile
+    from android_dl_encode import keep_original
     c = _colors()
     folder = os.path.abspath(folder)
     options = {"quiet": True, "noplaylist": True, "postprocessors": [], "fixup": "never",
@@ -136,12 +137,14 @@ def download(ytid, folder, mode):
             raise RuntimeError("Live streams and empty extractions are not supported")
         tracks = plan(ydl, info, mode, ffmpeg)
     profile = None
-    delete_original = True
+    # The Settings switch decides whether the original is exported too (DELETE_ORIGINAL is not used).
+    keep = False
     if len(tracks) == 1 and kind(tracks[0]) == "audio":
-        selected, delete_original = selected_profile()
+        selected, _ = selected_profile()
         if accepts(selected, tracks[0].get("ext")):
             validate(selected)
             profile = selected
+            keep = keep_original()
         elif selected.get("ext") != "COPY":
             print("[encode] The profile does not support this extension; keeping the original.")
     os.makedirs(folder, exist_ok=True)
@@ -199,14 +202,17 @@ def download(ytid, folder, mode):
         destination = _publish(output)
         if not isinstance(destination, str) or not destination:
             raise RuntimeError("The export did not confirm the destination")
+        if profile and keep and paths[0] != output:
+            try:
+                print("[encode] Original exported: " + str(_publish(paths[0])))
+            except Exception as error:
+                print("[encode] The original could not be exported: %s" % error)
     except BaseException:
         print("\n" + c.r + "Download interrupted. Files kept: " + work + c.w)
         raise
-    if profile and not delete_original:
-        print("[encode] Original kept locally: " + paths[0])
-    elif destination != os.path.abspath(output):
+    if destination != os.path.abspath(output):
         shutil.rmtree(work, ignore_errors=True)
-    elif profile and delete_original and paths[0] != output:
+    elif profile and not keep and paths[0] != output:
         os.unlink(paths[0])
     print("\nSaved: " + c.g + destination + c.w)
     return destination

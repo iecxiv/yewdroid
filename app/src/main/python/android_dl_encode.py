@@ -1,4 +1,5 @@
 """Conversion step of client audio downloads: applies the selected yewtube encoding preset with FFmpeg."""
+import json
 import os
 
 
@@ -10,6 +11,30 @@ def selected():
     except Exception:
         return None
     return None if profile.get("ext") == "COPY" else profile
+
+
+def _keep_file():
+    from java import jclass
+    app = jclass("com.chaquo.python.Python").getPlatform().getApplication()
+    return os.path.join(str(app.getFilesDir().getAbsolutePath()), "keep_original.json")
+
+
+def keep_original():
+    """True when converted downloads must also export the original file (the Settings switch)."""
+    try:
+        with open(_keep_file(), encoding="utf-8") as handle:
+            return bool(json.load(handle).get("keep"))
+    except Exception:
+        return False
+
+
+def set_keep_original(value):
+    path = _keep_file()
+    temporary = path + ".tmp"
+    with open(temporary, "w", encoding="utf-8") as handle:
+        json.dump({"keep": bool(value)}, handle)
+    os.replace(temporary, path)
+    return True
 
 
 def check(profile):

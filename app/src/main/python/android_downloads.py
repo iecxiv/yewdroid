@@ -215,7 +215,16 @@ def _download(job, tracker, clients):
             if profile:
                 from android_dl_encode import encode
                 tracker.stage("encode")
-                path = encode(path, profile, tracker)
+                converted = encode(path, profile, tracker)
+                tracker.stage("export")
+                destination = _publish(converted)
+                # The job asked to keep the original: export it too (only if a conversion happened).
+                if job.get("keep_original") and converted != path:
+                    try:
+                        _publish(path)
+                    except Exception:
+                        _log()
+                return destination
             tracker.stage("export")
             return _publish(path)
 
@@ -282,14 +291,16 @@ def _loop():
 
 def enqueue(ytid, title, kind, format_id, label):
     kind = "audio" if kind == "audio" else "video"
-    profile, problem = None, ""
+    profile, problem, keep = None, "", False
     if kind == "audio":
-        # The preset selected now is the one this download keeps, even if settings change meanwhile.
+        # The preset and the keep-original switch as they are now are the ones this download uses,
+        # even if settings change meanwhile.
         try:
-            from android_dl_encode import check, selected
+            from android_dl_encode import check, keep_original, selected
             profile = selected()
             if profile:
                 check(profile)
+                keep = keep_original()
         except Exception as error:
             lines = [line.strip() for line in _clean(error).splitlines() if line.strip()]
             problem = (lines[0] if lines else "Error")[:200]
@@ -299,7 +310,7 @@ def enqueue(ytid, title, kind, format_id, label):
         job = {"id": _state["next"], "ytid": str(ytid), "title": str(title), "kind": kind,
                "format_id": str(format_id), "label": shown, "state": "error" if problem else "queued",
                "percent": 0.0, "stage": "", "path": "", "error": problem,
-               "encoder": None if problem else profile}
+               "encoder": None if problem else profile, "keep_original": bool(keep and not problem)}
         _jobs.append(job)
         if not problem:
             worker = _state["worker"]

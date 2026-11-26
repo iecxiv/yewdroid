@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cfgui_keep_original">Conservar el audio original</string>
+    <string name="cfgui_keep_original_desc">Cuando se convierte una descarga, guarda también el archivo original junto al convertido. Necesita un preajuste distinto de None.</string>
+</resources>
