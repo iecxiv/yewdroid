@@ -24,6 +24,8 @@ _WEIGHTS = {
     "video": {"video": (0.0, 0.75), "audio": (0.75, 0.95), "merge": (0.95, 0.98),
               "export": (0.98, 1.0)},
 }
+# Audio downloads that are converted with an encoding preset before being exported.
+_WEIGHTS_ENCODED = {"download": (0.0, 0.85), "encode": (0.85, 0.97), "export": (0.97, 1.0)}
 
 
 class _Silent:
@@ -76,7 +78,13 @@ def _extract(ytid):
 
 def formats(ytid):
     """JSON with the audio and video options yt-dlp offers for a video."""
-    result = {"audio": [], "video": [], "error": ""}
+    result = {"audio": [], "video": [], "error": "", "encoder": ""}
+    try:
+        from android_dl_encode import selected
+        profile = selected()
+        result["encoder"] = str(profile.get("name", "")) if profile else ""
+    except Exception:
+        _log()
     try:
         info = _extract(ytid)
         usable = [f for f in ((info or {}).get("formats") or []) if f.get("url") and not f.get("has_drm")]
@@ -200,13 +208,24 @@ def _download(job, tracker, clients):
     if job["kind"] == "audio":
         from android_audio_download import download_audio
         from android_video_download import _publish
-        return download_audio(job["ytid"], folder, _publish, job["format_id"], tracker, clients)
+        profile = job.get("encoder")
+
+        def publish(path):
+            # Convert first when the job was queued with an encoding preset, then export.
+            if profile:
+                from android_dl_encode import encode
+                tracker.stage("encode")
+                path = encode(path, profile, tracker)
+            tracker.stage("export")
+            return _publish(path)
+
+        return download_audio(job["ytid"], folder, publish, job["format_id"], tracker, clients)
     from android_video_download import download_video
     return download_video(job["ytid"], folder, lambda data: None, job["format_id"], tracker, clients)
 
 
 def _run(job):
-    weights = _WEIGHTS[job["kind"]]
+    weights = _WEIGHTS_ENCODED if job.get("encoder") else _WEIGHTS[job["kind"]]
 
     def on_stage(name, fraction):
         start, end = weights.get(name, (0.0, 1.0))
@@ -263,18 +282,33 @@ def _loop():
 
 def enqueue(ytid, title, kind, format_id, label):
     kind = "audio" if kind == "audio" else "video"
+    profile, problem = None, ""
+    if kind == "audio":
+        # The preset selected now is the one this download keeps, even if settings change meanwhile.
+        try:
+            from android_dl_encode import check, selected
+            profile = selected()
+            if profile:
+                check(profile)
+        except Exception as error:
+            lines = [line.strip() for line in _clean(error).splitlines() if line.strip()]
+            problem = (lines[0] if lines else "Error")[:200]
     with _lock:
         _state["next"] += 1
+        shown = str(label) + (" \u2192 " + str(profile.get("name", "")) if profile and not problem else "")
         job = {"id": _state["next"], "ytid": str(ytid), "title": str(title), "kind": kind,
-               "format_id": str(format_id), "label": str(label), "state": "queued",
-               "percent": 0.0, "stage": "", "path": "", "error": ""}
+               "format_id": str(format_id), "label": shown, "state": "error" if problem else "queued",
+               "percent": 0.0, "stage": "", "path": "", "error": problem,
+               "encoder": None if problem else profile}
         _jobs.append(job)
-        worker = _state["worker"]
-        if worker is None or not worker.is_alive():
-            worker = threading.Thread(target=_loop, daemon=True, name="yewdroid-downloads")
-            _state["worker"] = worker
-            worker.start()
-    _pending.put(job["id"])
+        if not problem:
+            worker = _state["worker"]
+            if worker is None or not worker.is_alive():
+                worker = threading.Thread(target=_loop, daemon=True, name="yewdroid-downloads")
+                _state["worker"] = worker
+                worker.start()
+    if not problem:
+        _pending.put(job["id"])
     _push(True)
     return job["id"]
 

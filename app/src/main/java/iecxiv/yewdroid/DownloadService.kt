@@ -128,6 +128,7 @@ class DownloadService : Service() {
         "video" -> getString(R.string.dl_stage_video)
         "audio" -> getString(R.string.dl_stage_audio)
         "merge" -> getString(R.string.dl_stage_merge)
+        "encode" -> getString(R.string.dl_stage_encode)
         "export" -> getString(R.string.dl_stage_export)
         "cancelling" -> getString(R.string.dl_stage_cancelling)
         else -> ""

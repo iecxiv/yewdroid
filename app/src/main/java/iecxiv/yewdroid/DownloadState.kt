@@ -11,14 +11,18 @@ data class FormatOption(
     val recommended: Boolean = false
 )
 
-/** The format picker: loading, failed ([error]) or ready ([options]). */
+/**
+ * The format picker: loading, failed ([error]) or ready ([options]). [encoder] is the name of the
+ * encoding preset audio downloads will be converted with (empty when they are kept as downloaded).
+ */
 data class FormatsState(
     val ytid: String,
     val title: String,
     val kind: String,
     val loading: Boolean = false,
     val options: List<FormatOption> = emptyList(),
-    val error: String = ""
+    val error: String = "",
+    val encoder: String = ""
 )
 
 /** A queued, running or finished download. [kind] is "audio" or "video". */
@@ -71,5 +75,10 @@ fun parseFormats(raw: String, ytid: String, title: String, kind: String): Format
             recommended = item.optBoolean("recommended")
         )
     }
-    return FormatsState(ytid, title, kind, options = options, error = json.optString("error"))
+    return FormatsState(
+        ytid, title, kind,
+        options = options,
+        error = json.optString("error"),
+        encoder = if (kind == "audio") json.optString("encoder") else ""
+    )
 }
