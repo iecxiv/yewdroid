@@ -21,6 +21,7 @@
     <string name="header_hide_options">Hide options</string>
     <string name="client_search_hint">Search YouTube</string>
     <string name="client_search">Search</string>
+    <string name="client_autoqueue">Auto-queue the list</string>
     <string name="client_empty">Search for something to see results.</string>
     <string name="client_page">Page %1$d of %2$d</string>
     <string name="client_prev">Previous page</string>
@@ -51,6 +52,7 @@
     <string name="pref_language_save_failed">[settings] Could not save the output language.</string>
     <string name="pref_header_save_failed">[settings] Could not save the header state.</string>
     <string name="pref_terminal_language_save_failed">[settings] Could not save the terminal language.</string>
+    <string name="pref_autoqueue_save_failed">[settings] Could not save the auto-queue setting.</string>
     <string name="terminal_resize_failed">[terminal] Could not update the size: %1$s</string>
     <string name="player_unavailable">[player] playback service unavailable</string>
 </resources>

@@ -23,6 +23,8 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -49,6 +51,7 @@ import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
 
+private val BG = Color(0xFF0C0C0C)
 private val FG = Color(0xFFDCDFE4)
 private val ACCENT = Color(0xFF98C379)
 private val MUTED = Color(0xFF7F848E)
@@ -57,16 +60,21 @@ private val MUTED = Color(0xFF7F848E)
 private const val CLIENT_COLS = 100
 private const val CLIENT_ROWS = 24
 
-/** Per-item actions: label to the yewtube command for result number n. */
-private val ITEM_ACTIONS: List<Pair<Int, (Int) -> String>> = listOf(
-    R.string.client_play_audio to { n -> "$n -a" },
-    R.string.client_play_video to { n -> "$n -w" },
-    R.string.client_download_audio to { n -> "da $n" },
-    R.string.client_download_video to { n -> "dv $n" },
-    R.string.client_add to { n -> "add $n" },
-    R.string.client_share to { n -> "share $n" },
-    R.string.client_open_with to { n -> "openwith $n" },
-    R.string.client_more_from to { n -> "u $n" }
+/**
+ * yewtube selection for result n: "n-" plays n and queues the rest of the page, "n" plays only n.
+ */
+private fun selection(n: Int, queueRest: Boolean) = if (queueRest) "$n-" else "$n"
+
+/** Per-item actions: label to the yewtube command for result number n (queueRest = auto-queue on). */
+private val ITEM_ACTIONS: List<Pair<Int, (Int, Boolean) -> String>> = listOf(
+    R.string.client_play_audio to { n, queueRest -> "${selection(n, queueRest)} -a" },
+    R.string.client_play_video to { n, queueRest -> "${selection(n, queueRest)} -w" },
+    R.string.client_download_audio to { n, _ -> "da $n" },
+    R.string.client_download_video to { n, _ -> "dv $n" },
+    R.string.client_add to { n, _ -> "add $n" },
+    R.string.client_share to { n, _ -> "share $n" },
+    R.string.client_open_with to { n, _ -> "openwith $n" },
+    R.string.client_more_from to { n, _ -> "u $n" }
 )
 
 private val thumbnails = LruCache<String, ImageBitmap>(120)
@@ -77,6 +85,10 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     val focus = LocalFocusManager.current
     val state by TerminalHub.client.collectAsState()
     var query by rememberSaveable { mutableStateOf("") }
+    val autoQueueFlow = remember(ctx.applicationContext) { TerminalPreferences.clientAutoQueue(ctx.applicationContext) }
+    val savedAutoQueue by autoQueueFlow.collectAsState(initial = null)
+    var selectedAutoQueue by remember { mutableStateOf<Boolean?>(null) }
+    val autoQueue = selectedAutoQueue ?: savedAutoQueue
     LaunchedEffect(Unit) {
         TerminalHub.ensureStarted(ctx.applicationContext, CLIENT_COLS, CLIENT_ROWS)
     }
@@ -119,6 +131,36 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                 Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.client_search), tint = FG)
             }
         }
+        if (autoQueue != null) {
+            Row(
+                Modifier.fillMaxWidth()
+                    .clickable {
+                        val value = !autoQueue
+                        selectedAutoQueue = value
+                        TerminalPreferences.saveClientAutoQueue(ctx, value)
+                    }
+                    .padding(horizontal = 12.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Switch(
+                    checked = autoQueue,
+                    onCheckedChange = null,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = BG,
+                        checkedTrackColor = ACCENT,
+                        checkedBorderColor = ACCENT,
+                        uncheckedThumbColor = FG,
+                        uncheckedTrackColor = Color(0xFF2A2A2A),
+                        uncheckedBorderColor = Color(0xFF555555)
+                    )
+                )
+                Text(
+                    stringResource(R.string.client_autoqueue),
+                    style = small.copy(color = FG),
+                    modifier = Modifier.padding(start = 10.dp)
+                )
+            }
+        }
         if (state.busy || !state.ready) {
             LinearProgressIndicator(Modifier.fillMaxWidth(), color = ACCENT, trackColor = Color(0xFF2A2A2A))
         }
@@ -132,7 +174,7 @@ fun ClientScreen(modifier: Modifier = Modifier) {
         } else {
             LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
                 items(state.items, key = { "${it.n}-${it.id}" }) { item ->
-                    ResultRow(item, playlist = state.mode == "ytpl")
+                    ResultRow(item, playlist = state.mode == "ytpl", queueRest = autoQueue ?: true)
                 }
             }
         }
@@ -165,7 +207,7 @@ fun ClientScreen(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun ResultRow(item: ClientItem, playlist: Boolean) {
+private fun ResultRow(item: ClientItem, playlist: Boolean, queueRest: Boolean) {
     var menu by remember { mutableStateOf(false) }
     val titleStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = FG)
     val subtitleStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = MUTED)
@@ -176,7 +218,10 @@ private fun ResultRow(item: ClientItem, playlist: Boolean) {
     }.filter { it.isNotEmpty() }.joinToString(" \u00b7 ")
     Row(
         Modifier.fillMaxWidth()
-            .clickable { TerminalHub.runCommand(item.n.toString()) }
+            .clickable {
+                // Playlists open; videos play (and queue the rest of the page when auto-queue is on).
+                TerminalHub.runCommand(if (playlist) item.n.toString() else selection(item.n, queueRest))
+            }
             .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -212,7 +257,7 @@ private fun ResultRow(item: ClientItem, playlist: Boolean) {
                             text = { Text(stringResource(label)) },
                             onClick = {
                                 menu = false
-                                TerminalHub.runCommand(command(item.n))
+                                TerminalHub.runCommand(command(item.n, queueRest))
                             }
                         )
                     }

@@ -32,6 +32,7 @@ object TerminalPreferences {
     private val translateKey = booleanPreferencesKey("translate_output")
     private val headerExpandedKey = booleanPreferencesKey("header_expanded")
     private val terminalLanguageKey = stringPreferencesKey("terminal_language")
+    private val autoQueueKey = booleanPreferencesKey("client_autoqueue")
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val writes = Channel<Pair<Context, Float>>(Channel.CONFLATED)
     // Append commands in order: unlike zoom changes, commands must not be conflated.
@@ -40,6 +41,7 @@ object TerminalPreferences {
     private val translateWrites = Channel<Pair<Context, Boolean>>(Channel.CONFLATED)
     private val headerWrites = Channel<Pair<Context, Boolean>>(Channel.CONFLATED)
     private val languageWrites = Channel<Pair<Context, String>>(Channel.CONFLATED)
+    private val autoQueueWrites = Channel<Pair<Context, Boolean>>(Channel.CONFLATED)
 
     init {
         scope.launch {
@@ -102,6 +104,16 @@ object TerminalPreferences {
                 } catch (error: IOException) {
                     Log.e("TerminalPreferences", "Cannot save terminal language", error)
                     TerminalHub.onWrite("\n" + context.getString(R.string.pref_terminal_language_save_failed) + "\n")
+                }
+            }
+        }
+        scope.launch {
+            for ((context, enabled) in autoQueueWrites) {
+                try {
+                    context.terminalDataStore.edit { it[autoQueueKey] = enabled }
+                } catch (error: IOException) {
+                    Log.e("TerminalPreferences", "Cannot save auto-queue", error)
+                    TerminalHub.onWrite("\n" + context.getString(R.string.pref_autoqueue_save_failed) + "\n")
                 }
             }
         }
@@ -173,6 +185,20 @@ object TerminalPreferences {
 
     fun saveTerminalLanguage(context: Context, choice: String) {
         if (choice in LANGUAGES) languageWrites.trySend(context.applicationContext to choice)
+    }
+
+    /** Whether tapping a result also queues the rest of the page (on by default). */
+    fun clientAutoQueue(context: Context): Flow<Boolean> = context.applicationContext.terminalDataStore.data
+        .catch { error ->
+            if (error is IOException) {
+                Log.e("TerminalPreferences", "Cannot read auto-queue", error)
+                emit(emptyPreferences())
+            } else throw error
+        }
+        .map { values -> values[autoQueueKey] ?: true }
+
+    fun saveClientAutoQueue(context: Context, enabled: Boolean) {
+        autoQueueWrites.trySend(context.applicationContext to enabled)
     }
 
     fun history(context: Context): Flow<List<String>?> = context.applicationContext.terminalDataStore.data

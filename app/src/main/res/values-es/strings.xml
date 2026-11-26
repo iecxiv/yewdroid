@@ -21,6 +21,7 @@
     <string name="header_hide_options">Ocultar opciones</string>
     <string name="client_search_hint">Buscar en YouTube</string>
     <string name="client_search">Buscar</string>
+    <string name="client_autoqueue">Poner en cola automáticamente</string>
     <string name="client_empty">Busca algo para ver resultados.</string>
     <string name="client_page">Página %1$d de %2$d</string>
     <string name="client_prev">Página anterior</string>
@@ -51,6 +52,7 @@
     <string name="pref_language_save_failed">[ajustes] No se pudo guardar el idioma de la salida.</string>
     <string name="pref_header_save_failed">[ajustes] No se pudo guardar el estado de la cabecera.</string>
     <string name="pref_terminal_language_save_failed">[ajustes] No se pudo guardar el idioma de la terminal.</string>
+    <string name="pref_autoqueue_save_failed">[ajustes] No se pudo guardar la opción de cola automática.</string>
     <string name="terminal_resize_failed">[terminal] No se pudo actualizar el tamaño: %1$s</string>
     <string name="player_unavailable">[reproductor] el servicio de reproducción no está disponible</string>
 </resources>
