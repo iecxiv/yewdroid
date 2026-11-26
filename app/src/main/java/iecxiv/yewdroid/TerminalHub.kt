@@ -249,6 +249,13 @@ object TerminalHub {
         scope.launch { runCatching { py?.callAttr("send", line) } }
     }
 
+    /** Sends several commands in order from one coroutine, so they cannot overtake each other. */
+    fun runCommands(vararg lines: String) {
+        if (py == null) return
+        _client.value = _client.value.copy(busy = true)
+        scope.launch { for (line in lines) runCatching { py?.callAttr("send", line) } }
+    }
+
     /** Reads the tracks of the current playback (called each time a track starts). */
     private fun refreshQueue() {
         scope.launch {
