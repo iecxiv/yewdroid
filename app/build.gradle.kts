@@ -115,9 +115,10 @@ if (enableFfmpeg) {
         // Already built: delete app/build/generated/ffmpeg to force a rebuild.
         onlyIf { !ffmpegBuilt() }
         doFirst {
-            val missing = missingTools("make", "pkg-config", "python3")
+            // FFmpeg's configure also needs a native C11 compiler (gcc) and binutils for its host tools.
+            val missing = missingTools("make", "pkg-config", "python3", "gcc", "objdump")
             if (missing.isNotEmpty()) {
-                throw GradleException("Missing tools: ${missing.joinToString()}. Install them with: sudo apt install make pkg-config python3")
+                throw GradleException("Missing tools: ${missing.joinToString()}. Install them with: sudo apt install build-essential pkg-config python3")
             }
             val ndk = ffmpegNdk.orNull ?: installedNdk()
                 ?: throw GradleException("No Linux NDK found. Install one from Android Studio (SDK Manager > SDK Tools > NDK) or define -PffmpegNdk")
