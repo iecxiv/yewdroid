@@ -148,6 +148,8 @@ fun TerminalScreen() {
     val now by TerminalHub.nowPlaying.collectAsState()
     val videoOn by TerminalHub.videoOn.collectAsState()
     val videoAspect by TerminalHub.videoAspect.collectAsState()
+    val translationAvailable by TerminalHub.translationAvailable.collectAsState()
+    val translated by TerminalHub.translated.collectAsState()
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     var fullscreen by rememberSaveable { mutableStateOf(false) }
     val showVideo = playing && videoOn
@@ -198,6 +200,11 @@ fun TerminalScreen() {
                     .clickableNoRipple { changeZoom(-1f) }.padding(12.dp))
                 Text("A+", color = FG, style = uiStyle, modifier = Modifier
                     .clickableNoRipple { changeZoom(1f) }.padding(12.dp))
+                if (translationAvailable) {
+                    CtrlBtn(Icons.Filled.Language, if (translated) ACCENT else FG) {
+                        TerminalHub.setTranslated(ctx, !translated)
+                    }
+                }
             }
             Text("Terminal", color = FG, style = uiStyle.copy(fontSize = 12.sp), modifier = Modifier.padding(end = 6.dp))
             Switch(
@@ -470,8 +477,12 @@ private fun VideoSurface(modifier: Modifier) {
 }
 
 @Composable
-private fun CtrlBtn(icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
-    IconButton(onClick = onClick) { Icon(icon, contentDescription = null, tint = FG) }
+private fun CtrlBtn(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    tint: Color = FG,
+    onClick: () -> Unit
+) {
+    IconButton(onClick = onClick) { Icon(icon, contentDescription = null, tint = tint) }
 }
 
 private fun Modifier.clickableNoRipple(onClick: () -> Unit): Modifier =

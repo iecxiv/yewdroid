@@ -19,6 +19,7 @@ def install(term):
         return
     term._layout_installed = True
     token = object()
+    redraw_token = object()
     lock = threading.Lock()
     pending = [None, False]
     renders = deque(maxlen=32)
@@ -176,9 +177,19 @@ def install(term):
                 pending[1] = True
                 term._in.q.put(token)
 
+    def request_redraw():
+        if term._in is not None:
+            term._in.q.put(redraw_token)
+
     def readline(self, *args):
         while True:
             item = self.q.get()
+            if item is redraw_token:
+                try:
+                    redraw[0]()
+                except Exception:
+                    traceback.print_exc(file=term._orig_err)
+                continue
             if item is token:
                 with lock:
                     size, pending[1] = pending[0], False
@@ -196,3 +207,4 @@ def install(term):
     term._patch_traceback = install_screen
     term._In.readline = readline
     term.resize = resize
+    term.request_redraw = request_redraw

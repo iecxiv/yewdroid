@@ -27,11 +27,13 @@ object TerminalPreferences {
     private val fontSize = floatPreferencesKey("font_size_sp")
     private val commandHistory = stringPreferencesKey("command_history_json")
     private val terminalModeKey = booleanPreferencesKey("terminal_mode")
+    private val translateKey = booleanPreferencesKey("translate_output")
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val writes = Channel<Pair<Context, Float>>(Channel.CONFLATED)
     // Append commands in order: unlike zoom changes, commands must not be conflated.
     private val historyWrites = Channel<Pair<Context, String>>(Channel.UNLIMITED)
     private val modeWrites = Channel<Pair<Context, Boolean>>(Channel.CONFLATED)
+    private val translateWrites = Channel<Pair<Context, Boolean>>(Channel.CONFLATED)
 
     init {
         scope.launch {
@@ -67,6 +69,16 @@ object TerminalPreferences {
                 }
             }
         }
+        scope.launch {
+            for ((context, enabled) in translateWrites) {
+                try {
+                    context.terminalDataStore.edit { it[translateKey] = enabled }
+                } catch (error: IOException) {
+                    Log.e("TerminalPreferences", "Cannot save output language", error)
+                    TerminalHub.onWrite("\n[settings] Could not save the output language.\n")
+                }
+            }
+        }
     }
 
     fun zoom(context: Context): Flow<Float?> = context.applicationContext.terminalDataStore.data
@@ -96,6 +108,19 @@ object TerminalPreferences {
 
     fun saveTerminalMode(context: Context, enabled: Boolean) {
         modeWrites.trySend(context.applicationContext to enabled)
+    }
+
+    fun translateOutput(context: Context): Flow<Boolean> = context.applicationContext.terminalDataStore.data
+        .catch { error ->
+            if (error is IOException) {
+                Log.e("TerminalPreferences", "Cannot read output language", error)
+                emit(emptyPreferences())
+            } else throw error
+        }
+        .map { values -> values[translateKey] ?: false }
+
+    fun saveTranslateOutput(context: Context, enabled: Boolean) {
+        translateWrites.trySend(context.applicationContext to enabled)
     }
 
     fun history(context: Context): Flow<List<String>?> = context.applicationContext.terminalDataStore.data

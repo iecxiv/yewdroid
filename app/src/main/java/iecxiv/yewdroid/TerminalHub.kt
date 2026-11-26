@@ -22,8 +22,10 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** Interface invoked by Python (yt_term.py). */
@@ -57,6 +59,8 @@ object TerminalHub {
     val videoAspect = MutableStateFlow(16f / 9f)
     val positionMs = MutableStateFlow(0L)
     val durationMs = MutableStateFlow(0L)
+    val translationAvailable = MutableStateFlow(false)
+    val translated = MutableStateFlow(false)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val main = Handler(Looper.getMainLooper())
@@ -112,9 +116,18 @@ object TerminalHub {
         if (started) return
         started = true
         val dir = ctx.filesDir.absolutePath
+        val appContext = ctx.applicationContext
         scope.launch {
             val m = Python.getInstance().getModule("yt_term")
             Python.getInstance().getModule("terminal_layout").callAttr("install", m)
+            val enabled = runCatching { TerminalPreferences.translateOutput(appContext).first() }.getOrDefault(false)
+            val available = runCatching {
+                val i18n = Python.getInstance().getModule("android_i18n")
+                i18n.callAttr("install", m)
+                i18n.callAttr("configure", Locale.getDefault().toLanguageTag(), enabled).toBoolean()
+            }.getOrDefault(false)
+            translationAvailable.value = available
+            translated.value = enabled && available
             py = m
             val initial = sizes.tryReceive().getOrNull() ?: (cols to rows)
             m.callAttr("start", sink, dir, initial.first, initial.second)
@@ -123,6 +136,18 @@ object TerminalHub {
                 runCatching { m.callAttr("resize", width, height) }.onFailure {
                     onWrite("\n[terminal] Could not update the size: ${it.message}\n")
                 }
+            }
+        }
+    }
+
+    fun setTranslated(ctx: Context, on: Boolean) {
+        if (!translationAvailable.value) return
+        translated.value = on
+        TerminalPreferences.saveTranslateOutput(ctx, on)
+        scope.launch {
+            runCatching {
+                Python.getInstance().getModule("android_i18n").callAttr("set_enabled", on)
+                py?.callAttr("request_redraw")
             }
         }
     }
