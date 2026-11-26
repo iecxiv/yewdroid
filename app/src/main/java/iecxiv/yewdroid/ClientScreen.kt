@@ -306,7 +306,7 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                         modifier = Modifier.weight(1f).padding(vertical = 4.dp)
                             .onFocusChanged { focused = it.hasFocus }
                             .border(1.dp, ACCENT, RoundedCornerShape(6.dp))
-                            .padding(horizontal = 10.dp, vertical = 10.dp),
+                            .padding(start = 10.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
                         singleLine = true,
                         textStyle = searchStyle,
                         cursorBrush = SolidColor(ACCENT),
@@ -317,9 +317,21 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                         ),
                         keyboardActions = KeyboardActions(onSearch = { search() }),
                         decorationBox = { inner ->
-                            Box(Modifier.fillMaxWidth()) {
-                                if (query.isEmpty()) Text(stringResource(R.string.client_search_hint), style = small)
-                                inner()
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.weight(1f)) {
+                                    if (query.isEmpty()) Text(stringResource(R.string.client_search_hint), style = small)
+                                    inner()
+                                }
+                                if (query.isNotEmpty()) {
+                                    // The x empties the box; the keyboard and focus stay where they are.
+                                    Icon(
+                                        Icons.Filled.Close,
+                                        contentDescription = stringResource(R.string.client_history_clear),
+                                        tint = MUTED,
+                                        modifier = Modifier.padding(start = 6.dp).size(32.dp)
+                                            .clickable { query = "" }.padding(6.dp)
+                                    )
+                                }
                             }
                         }
                     )
