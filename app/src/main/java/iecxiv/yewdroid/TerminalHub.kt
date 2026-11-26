@@ -28,6 +28,9 @@ import kotlinx.coroutines.withContext
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
+/** Longest a play request is considered pending (ms): the first extraction of a video can take a while. */
+private const val PLAY_PENDING_MS = 45_000L
+
 /** Interface invoked by Python (yt_term.py). */
 interface TermSink {
     fun write(s: String)
@@ -76,6 +79,8 @@ object TerminalHub {
     val shuffle = MutableStateFlow(false)
     /** Repeat chosen in the player: 0 = off, 1 = the list, 2 = the current track. */
     val repeat = MutableStateFlow(0)
+    /** True from tapping a video until it starts (or fails): the client shows it and ignores more taps. */
+    val loadingPlay = MutableStateFlow(false)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val main = Handler(Looper.getMainLooper())
@@ -94,6 +99,8 @@ object TerminalHub {
     /** Where to resume the track that is started again after the "show video" setting changed, and its title. */
     @Volatile private var resumeMs = 0L
     @Volatile private var resumeTitle = ""
+    /** When the play request now pending was made (ms), to tell it from a later one. */
+    @Volatile private var playPendingSince = 0L
     private var surface: SurfaceView? = null
     private var started = false
     private val sink = HubSink()
@@ -139,32 +146,14 @@ object TerminalHub {
         exo = null
     }
 
-    /**
-     * Moving the video to another view (mini player, expanded player, fullscreen) gives the player a new
-     * surface. If the track then starts over, it is put back where it was a moment before.
-     */
     fun attachSurface(view: SurfaceView) {
         surface = view
-        val p = exo ?: return
-        val position = p.currentPosition
-        val title = nowPlaying.value
-        p.setVideoSurfaceView(view)
-        keepPosition(position, title)
+        exo?.setVideoSurfaceView(view)
     }
 
     fun detachSurface(view: SurfaceView) {
         if (surface === view) surface = null
         exo?.clearVideoSurfaceView(view)
-    }
-
-    private fun keepPosition(position: Long, title: String) {
-        if (position < 3000L || !playing.value) return
-        main.postDelayed({
-            val p = exo ?: return@postDelayed
-            if (playing.value && nowPlaying.value == title && p.currentPosition + 2000L < position) {
-                p.seekTo(position)
-            }
-        }, 1000L)
     }
 
     @Synchronized
@@ -303,6 +292,26 @@ object TerminalHub {
         scope.launch { runCatching { py?.callAttr("send", line) } }
     }
 
+    /**
+     * Sends a command that starts playback. Getting the video can take many seconds the first time, and a
+     * second tap meanwhile would be queued and restart the track once the first one starts, so taps are
+     * ignored while one is pending. Returns false when this one was ignored.
+     */
+    fun runPlay(line: String): Boolean {
+        if (py == null) return false
+        val now = System.currentTimeMillis()
+        if (loadingPlay.value && now - playPendingSince < PLAY_PENDING_MS) return false
+        playPendingSince = now
+        loadingPlay.value = true
+        runCommand(line)
+        // If neither the start nor a failure is ever reported, the request is not kept pending for ever.
+        scope.launch {
+            delay(PLAY_PENDING_MS)
+            if (playPendingSince == now) loadingPlay.value = false
+        }
+        return true
+    }
+
     /** Sends several commands in order from one coroutine, so they cannot overtake each other. */
     fun runCommands(vararg lines: String) {
         if (py == null) return
@@ -350,6 +359,8 @@ object TerminalHub {
     fun onVideo(on: Boolean) { nextVideo = on }
 
     fun onPlay(url: String, title: String, artist: String, thumb: String) {
+        // The video is in hand and starting: it is no longer a pending request.
+        loadingPlay.value = false
         // The same track started again after the "show video" setting changed resumes where it was.
         val start = if (resumeMs > 0L && title == resumeTitle) resumeMs else 0L
         resumeMs = 0L
@@ -380,6 +391,8 @@ object TerminalHub {
     }
 
     fun onStopPlayback() {
+        // Playback ended, or a play request failed before starting: nothing is pending any more.
+        loadingPlay.value = false
         playing.value = false
         nowPlaying.value = ""
         videoOn.value = false
