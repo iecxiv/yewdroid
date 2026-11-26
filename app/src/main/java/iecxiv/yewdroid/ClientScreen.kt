@@ -523,7 +523,8 @@ fun ClientScreen(modifier: Modifier = Modifier) {
             title = stringResource(R.string.history_clear_confirm),
             confirmLabel = stringResource(R.string.history_clear),
             onConfirm = {
-                TerminalHub.runCommand("history clear")
+                // "history clear" leaves the list on screen; showing the history again refreshes it at once.
+                TerminalHub.runCommands("history clear", "history")
                 clearingHistory = false
             },
             onDismiss = { clearingHistory = false }
