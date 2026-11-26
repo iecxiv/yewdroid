@@ -6,6 +6,16 @@ import math
 import re
 
 
+def _show(saved, page, message):
+    """Reloads the opened playlist from [saved] on [page] (or the last page that still exists)."""
+    from mps_youtube import g, util
+    from mps_youtube.commands.songlist import paginatesongs
+    size = max(1, int(util.getxy().max_results))
+    g.active.songs = list(saved.songs)
+    last_page = max(0, math.ceil(len(saved.songs) / size) - 1)
+    paginatesongs(g.active, page=min(page, last_page), splash=False, msg=message)
+
+
 def add_entry(name, number):
     """pladd NAME N: appends result N of the current list to the saved playlist (created if new)."""
     from mps_youtube import content, g, playlists, util
@@ -28,7 +38,6 @@ def add_entry(name, number):
 def remove_entry(name, number):
     """plrm NAME N: removes entry N of the page being shown from the saved playlist and reloads the page."""
     from mps_youtube import content, g, playlists, util
-    from mps_youtube.commands.songlist import paginatesongs
     saved = g.userpl.get(name)
     size = max(1, int(util.getxy().max_results))
     page = int(g.current_page or 0)
@@ -39,10 +48,16 @@ def remove_entry(name, number):
         return
     del saved.songs[index]
     playlists.save()
-    g.active.songs = list(saved.songs)
-    last_page = max(0, math.ceil(len(saved.songs) / size) - 1)
-    paginatesongs(g.active, page=min(page, last_page), splash=False,
-                  msg=util.F("songs rm") % (1, "(%s)" % number))
+    _show(saved, page, util.F("songs rm") % (1, "(%s)" % number))
+
+
+def reload_view(name):
+    """plreload NAME: shows the saved playlist again on the current page, keeping the last message."""
+    from mps_youtube import g
+    saved = g.userpl.get(name)
+    if saved is None:
+        return
+    _show(saved, int(g.current_page or 0), g.message)
 
 
 def install():
@@ -53,4 +68,5 @@ def install():
     flags = re.IGNORECASE
     g.commands.insert(0, Command(re.compile(r"pladd\s+([-\w]+)\s+(\d+)\s*$", flags), None, None, add_entry))
     g.commands.insert(0, Command(re.compile(r"plrm\s+([-\w]+)\s+(\d+)\s*$", flags), None, None, remove_entry))
+    g.commands.insert(0, Command(re.compile(r"plreload\s+([-\w]+)\s*$", flags), None, None, reload_view))
     g._android_playlist_edit_installed = True

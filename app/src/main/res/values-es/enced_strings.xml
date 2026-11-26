@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="enced_title">Preajustes de codificación</string>
+    <string name="enced_loading">Cargando…</string>
+    <string name="enced_save">Guardar y cerrar</string>
+    <string name="enced_restore_defaults">Restaurar valores</string>
+    <string name="enced_load_failed">No se pudieron cargar los preajustes</string>
+    <string name="enced_saving">Guardando…</string>
+    <string name="enced_saved">Guardado. Perfiles recargados.</string>
+    <string name="enced_save_failed">No se pudieron guardar los preajustes</string>
+    <string name="enced_restore_title">¿Restaurar los preajustes originales?</string>
+    <string name="enced_restore_message">Se sustituirán tus cambios por los preajustes de codificación originales. El archivo no cambia hasta que pulses Guardar y cerrar.</string>
+    <string name="enced_restore">Restaurar</string>
+    <string name="enced_loading_defaults">Cargando valores originales…</string>
+    <string name="enced_defaults_loaded">Valores originales cargados. Pulsa Guardar y cerrar para aplicarlos.</string>
+    <string name="enced_restore_failed">No se pudieron restaurar los valores</string>
+    <string name="enced_discard_title">¿Descartar los cambios?</string>
+    <string name="enced_discard_message">Se perderán los cambios sin guardar.</string>
+    <string name="enced_discard">Descartar</string>
+    <string name="enced_keep">Seguir editando</string>
+</resources>

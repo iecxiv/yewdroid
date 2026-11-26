@@ -10,6 +10,11 @@ _KEYS = ("current_page", "result_count", "browse_mode", "last_search_query", "la
 _kept = {}
 
 
+def has_stash():
+    """True when search results are being kept (the client calls this directly)."""
+    return "search" in _kept
+
+
 def stash():
     """viewstash: remembers the results currently shown as the search results."""
     from mps_youtube import g

@@ -1,6 +1,7 @@
 package iecxiv.yewdroid
 
 import android.app.AlertDialog
+import android.content.Context
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
@@ -43,6 +44,12 @@ class EncoderEditorActivity : ComponentActivity() {
     private var normalMinWidth = 0
     private var normalPadding = IntArray(4)
 
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(AppLanguage.wrap(newBase))
+    }
+
+    private fun t(id: Int): String = getString(id)
+
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         val root = LinearLayout(this).apply {
@@ -61,11 +68,11 @@ class EncoderEditorActivity : ComponentActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        header.addView(TextView(this).apply { text = "Encoding presets"; textSize = 20f; setTextColor(Color.rgb(152, 195, 121)) }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        header.addView(TextView(this).apply { text = t(R.string.enced_title); textSize = 20f; setTextColor(Color.rgb(152, 195, 121)) }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         headerActions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         header.addView(headerActions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         root.addView(header)
-        status = TextView(this).apply { text = "Loading..."; setTextColor(Color.LTGRAY) }
+        status = TextView(this).apply { text = t(R.string.enced_loading); setTextColor(Color.LTGRAY) }
         root.addView(status)
         editor = EditText(this).apply {
             typeface = Typeface.MONOSPACE
@@ -80,9 +87,9 @@ class EncoderEditorActivity : ComponentActivity() {
             isEnabled = false
         }
         root.addView(editor, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
-        save = Button(this).apply { text = "Save & Close"; isEnabled = false; setOnClickListener { saveDocument() } }
-        restore = Button(this).apply { text = "Restore defaults"; isEnabled = false; setOnClickListener { confirmRestore() } }
-        cancel = Button(this).apply { text = "Cancel"; setOnClickListener { closeEditor() } }
+        save = Button(this).apply { text = t(R.string.enced_save); isEnabled = false; setOnClickListener { saveDocument() } }
+        restore = Button(this).apply { text = t(R.string.enced_restore_defaults); isEnabled = false; setOnClickListener { confirmRestore() } }
+        cancel = Button(this).apply { text = t(R.string.dialog_cancel); setOnClickListener { closeEditor() } }
         normalTextPx = save.textSize
         normalMinHeight = save.minHeight
         normalMinWidth = save.minWidth
@@ -107,7 +114,7 @@ class EncoderEditorActivity : ComponentActivity() {
                     if (state != null) restorePosition(state)
                 } }
             } catch (error: Exception) {
-                runOnUiThread { if (!isDestroyed) { busy = false; status.text = error.message ?: "Unable to load presets" } }
+                runOnUiThread { if (!isDestroyed) { busy = false; status.text = error.message ?: t(R.string.enced_load_failed) } }
             }
         }
     }
@@ -161,43 +168,43 @@ class EncoderEditorActivity : ComponentActivity() {
         if (busy) return
         val draft = editor.text.toString()
         setBusy(true)
-        status.text = "Saving..."
+        status.text = t(R.string.enced_saving)
         worker.execute {
             try {
                 callPython("android_encoder_editor", "save_document", draft, hash)
-                runOnUiThread { if (!isDestroyed) { Toast.makeText(this, "Saved. Profiles reloaded.", Toast.LENGTH_SHORT).show(); finish() } }
+                runOnUiThread { if (!isDestroyed) { Toast.makeText(this, t(R.string.enced_saved), Toast.LENGTH_SHORT).show(); finish() } }
             } catch (error: Exception) {
-                runOnUiThread { if (!isDestroyed) { status.text = error.message ?: "Unable to save presets"; setBusy(false) } }
+                runOnUiThread { if (!isDestroyed) { status.text = error.message ?: t(R.string.enced_save_failed); setBusy(false) } }
             }
         }
     }
 
     private fun confirmRestore() {
         if (busy) return
-        AlertDialog.Builder(this).setTitle("Restore default presets?")
-            .setMessage("This will replace your current edits with the original encoding presets. The file will not change until you select Save & Close.")
-            .setPositiveButton("Restore") { _, _ -> loadDefaults() }
-            .setNegativeButton("Cancel", null).show()
+        AlertDialog.Builder(this).setTitle(t(R.string.enced_restore_title))
+            .setMessage(t(R.string.enced_restore_message))
+            .setPositiveButton(t(R.string.enced_restore)) { _, _ -> loadDefaults() }
+            .setNegativeButton(t(R.string.dialog_cancel), null).show()
     }
 
     private fun loadDefaults() {
         if (busy) return
         val position = capturePosition()
         setBusy(true)
-        status.text = "Loading defaults..."
+        status.text = t(R.string.enced_loading_defaults)
         worker.execute {
             try {
                 val result = callPython("android_encoder_defaults", "default_document")
                 runOnUiThread { if (!isDestroyed) {
                     editor.setText(result.getString("text"))
-                    status.text = "Defaults loaded. Select Save & Close to apply them."
+                    status.text = t(R.string.enced_defaults_loaded)
                     setBusy(false)
                     position.putInt("start", 0); position.putInt("end", 0)
                     position.putInt("scrollX", 0); position.putInt("scrollY", 0)
                     restorePosition(position)
                 } }
             } catch (error: Exception) {
-                runOnUiThread { if (!isDestroyed) { status.text = error.message ?: "Unable to restore defaults"; setBusy(false); restorePosition(position) } }
+                runOnUiThread { if (!isDestroyed) { status.text = error.message ?: t(R.string.enced_restore_failed); setBusy(false); restorePosition(position) } }
             }
         }
     }
@@ -230,8 +237,8 @@ class EncoderEditorActivity : ComponentActivity() {
     private fun closeEditor() {
         if (busy) return
         if (editor.text.toString() == baseline) finish() else {
-            AlertDialog.Builder(this).setTitle("Discard changes?").setMessage("Unsaved edits will be lost.")
-                .setPositiveButton("Discard") { _, _ -> finish() }.setNegativeButton("Keep editing", null).show()
+            AlertDialog.Builder(this).setTitle(t(R.string.enced_discard_title)).setMessage(t(R.string.enced_discard_message))
+                .setPositiveButton(t(R.string.enced_discard)) { _, _ -> finish() }.setNegativeButton(t(R.string.enced_keep), null).show()
         }
     }
 

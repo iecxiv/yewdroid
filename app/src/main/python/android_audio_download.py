@@ -14,6 +14,17 @@ def _clean(message):
     return re.sub(r"https?://\S+", "<URL>", plain(message))
 
 
+def _inside(folder, destination):
+    """True when [destination] is a local file inside [folder] (Android 8/9 keeps the file locally)."""
+    if not os.path.isabs(destination):
+        return False
+    folder = os.path.realpath(folder)
+    try:
+        return os.path.commonpath([folder, os.path.realpath(destination)]) == folder
+    except ValueError:
+        return False
+
+
 def download_audio(ytid, folder, publish, format_id=None, tracker=None, clients=None):
     """Downloads the audio of a video. `format_id` picks a specific audio format; `tracker`
     (android_dl_common.Progress) receives progress and can cancel; `clients` forces YouTube
@@ -131,7 +142,9 @@ def download_audio(ytid, folder, publish, format_id=None, tracker=None, clients=
         say(message)
         raise
     else:
-        if destination != path:
+        # Exported to public Downloads: the temporary folder is no longer needed. On Android 8/9 the
+        # final file stays where it is (converted or not), so the folder must not be deleted.
+        if not _inside(work, destination):
             shutil.rmtree(work, ignore_errors=True)
         say("Saved: %s" % destination)
         return destination

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="enced_title">Encoding presets</string>
+    <string name="enced_loading">Loading…</string>
+    <string name="enced_save">Save &amp; Close</string>
+    <string name="enced_restore_defaults">Restore defaults</string>
+    <string name="enced_load_failed">Unable to load presets</string>
+    <string name="enced_saving">Saving…</string>
+    <string name="enced_saved">Saved. Profiles reloaded.</string>
+    <string name="enced_save_failed">Unable to save presets</string>
+    <string name="enced_restore_title">Restore default presets?</string>
+    <string name="enced_restore_message">This will replace your current edits with the original encoding presets. The file will not change until you select Save &amp; Close.</string>
+    <string name="enced_restore">Restore</string>
+    <string name="enced_loading_defaults">Loading defaults…</string>
+    <string name="enced_defaults_loaded">Defaults loaded. Select Save &amp; Close to apply them.</string>
+    <string name="enced_restore_failed">Unable to restore defaults</string>
+    <string name="enced_discard_title">Discard changes?</string>
+    <string name="enced_discard_message">Unsaved edits will be lost.</string>
+    <string name="enced_discard">Discard</string>
+    <string name="enced_keep">Keep editing</string>
+</resources>
