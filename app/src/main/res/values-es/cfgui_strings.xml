@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cfgui_section">Reproducción y búsqueda</string>
+    <string name="cfgui_wait">Estos ajustes se cargan cuando la sesión ha arrancado.</string>
+    <string name="cfgui_failed">No se pudieron cargar los ajustes.</string>
+    <string name="cfgui_auto">Automático</string>
+    <string name="cfgui_ok">Aceptar</string>
+    <string name="cfgui_audio_format">Formato de audio</string>
+    <string name="cfgui_audio_format_desc">Formato preferido para reproducir.</string>
+    <string name="cfgui_video_format">Formato de vídeo</string>
+    <string name="cfgui_video_format_desc">Formato preferido para reproducir.</string>
+    <string name="cfgui_max_res">Resolución máxima</string>
+    <string name="cfgui_max_res_desc">Altura máxima del vídeo al reproducir.</string>
+    <string name="cfgui_order">Orden de resultados</string>
+    <string name="cfgui_order_desc">Cómo se ordenan los resultados de búsqueda cargados.</string>
+    <string name="cfgui_columns">Columnas de resultados</string>
+    <string name="cfgui_columns_desc">Campos extra en los resultados de la terminal.</string>
+    <string name="cfgui_show_video">Mostrar vídeo</string>
+    <string name="cfgui_show_video_desc">Muestra el vídeo al reproducir; solo audio si está desactivado.</string>
+    <string name="cfgui_always_repeat">Repetir siempre</string>
+    <string name="cfgui_always_repeat_desc">Repite sin pedirlo cada vez.</string>
+    <string name="cfgui_history">Guardar historial</string>
+    <string name="cfgui_history_desc">Recuerda lo que reproduces.</string>
+    <string name="cfgui_encoding_section">Codificación</string>
+    <string name="cfgui_encoding_desc">Preajuste usado para convertir archivos. None conserva el original.</string>
+    <string name="cfgui_ffmpeg_on">FFmpeg está incluido en esta compilación.</string>
+    <string name="cfgui_ffmpeg_off">FFmpeg no está incluido en esta compilación; los preajustes no pueden ejecutarse.</string>
+    <string name="cfgui_edit_presets">Editar preajustes</string>
+    <string name="cfgui_reset">Restaurar valores</string>
+    <string name="cfgui_reset_confirm">¿Restaurar estos ajustes a sus valores por defecto?</string>
+</resources>

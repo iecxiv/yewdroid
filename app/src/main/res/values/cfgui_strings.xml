@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cfgui_section">Playback and search</string>
+    <string name="cfgui_wait">These settings load once the session has started.</string>
+    <string name="cfgui_failed">Could not load the settings.</string>
+    <string name="cfgui_auto">Automatic</string>
+    <string name="cfgui_ok">OK</string>
+    <string name="cfgui_audio_format">Audio format</string>
+    <string name="cfgui_audio_format_desc">Preferred format for playback.</string>
+    <string name="cfgui_video_format">Video format</string>
+    <string name="cfgui_video_format_desc">Preferred format for playback.</string>
+    <string name="cfgui_max_res">Maximum resolution</string>
+    <string name="cfgui_max_res_desc">Highest video height to play.</string>
+    <string name="cfgui_order">Result order</string>
+    <string name="cfgui_order_desc">How the loaded search results are sorted.</string>
+    <string name="cfgui_columns">Result columns</string>
+    <string name="cfgui_columns_desc">Extra fields in the terminal search results.</string>
+    <string name="cfgui_show_video">Show video</string>
+    <string name="cfgui_show_video_desc">Show the video when playing; audio only if off.</string>
+    <string name="cfgui_always_repeat">Always repeat</string>
+    <string name="cfgui_always_repeat_desc">Repeat without asking for it each time.</string>
+    <string name="cfgui_history">Record history</string>
+    <string name="cfgui_history_desc">Remember what you play.</string>
+    <string name="cfgui_encoding_section">Encoding</string>
+    <string name="cfgui_encoding_desc">Preset used to convert files. None keeps the original.</string>
+    <string name="cfgui_ffmpeg_on">FFmpeg is included in this build.</string>
+    <string name="cfgui_ffmpeg_off">FFmpeg is not included in this build; presets cannot run.</string>
+    <string name="cfgui_edit_presets">Edit presets</string>
+    <string name="cfgui_reset">Restore defaults</string>
+    <string name="cfgui_reset_confirm">Restore these settings to their defaults?</string>
+</resources>
