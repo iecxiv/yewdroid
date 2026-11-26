@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.chaquo.python.Python
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -67,6 +68,9 @@ private val MUTED = Color(0xFF7F848E)
 /** Virtual screen the yewtube session uses while the native client is shown (sets the page size). */
 private const val CLIENT_COLS = 100
 private const val CLIENT_ROWS = 24
+
+/** Longest the old list stays hidden while waiting for the new one (ms). */
+private const val STALE_TIMEOUT_MS = 8000L
 
 /** Tabs of the native client. */
 private enum class Section(val label: Int) {
@@ -150,8 +154,9 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     var searchKept by remember { mutableStateOf(false) }
     // Name of the saved playlist shown inside the Playlists tab, if one is open.
     var openedPlaylist by rememberSaveable { mutableStateOf<String?>(null) }
-    // Result list being replaced by a new command: hidden until the new results arrive.
-    var staleItems by remember { mutableStateOf<List<ClientItem>?>(null) }
+    // The old list stays hidden until the session has taken this many snapshots (the new list is then in):
+    // comparing the lists is not enough, as the new one may be identical to the old one.
+    var waitSeq by remember { mutableStateOf<Int?>(null) }
     var focused by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     var adding by remember { mutableStateOf<Int?>(null) }
@@ -170,9 +175,8 @@ fun ClientScreen(modifier: Modifier = Modifier) {
         else searches.filter { it.contains(typed, ignoreCase = true) && !it.equals(typed, ignoreCase = true) }
     }
     val showHistory = section == Section.SEARCH && focused && suggestions.isNotEmpty()
-    // Compared by content: the list is re-read after each command, so it is a new object with the same items.
-    val hideResults = (section == Section.SEARCH && resultsFrom != Section.SEARCH) ||
-        (staleItems != null && state.items == staleItems)
+    val waiting = waitSeq?.let { state.seq < it } ?: false
+    val hideResults = (section == Section.SEARCH && resultsFrom != Section.SEARCH) || waiting
     val shownItems = if (hideResults) emptyList() else state.items
     val shownMessage = if (hideResults) "" else state.message
     val shownPages = if (hideResults) 0 else state.pages
@@ -183,6 +187,13 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     }
     LaunchedEffect(Unit) {
         TerminalHub.ensureStarted(ctx.applicationContext, CLIENT_COLS, CLIENT_ROWS)
+    }
+    // If the new list never arrives, show whatever there is rather than hiding it for good.
+    LaunchedEffect(waitSeq) {
+        if (waitSeq != null) {
+            delay(STALE_TIMEOUT_MS)
+            waitSeq = null
+        }
     }
 
     fun refreshOrder() {
@@ -197,11 +208,11 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     /**
      * Sends a command that replaces yewtube's result list. The search results are put aside first so
      * coming back to Search restores them without a new search; the old list stays hidden until the
-     * new one arrives.
+     * new one arrives (one snapshot per command sent).
      */
     fun replaceResults(source: Section, command: String) {
         val keepSearch = resultsFrom == Section.SEARCH && source != Section.SEARCH
-        if (resultsFrom != source) staleItems = state.items
+        if (resultsFrom != source) waitSeq = state.seq + if (keepSearch) 2 else 1
         resultsFrom = source
         if (keepSearch) {
             searchKept = true
@@ -253,7 +264,7 @@ fun ClientScreen(modifier: Modifier = Modifier) {
         } else if (target == Section.SEARCH && resultsFrom != Section.SEARCH) {
             if (searchKept || pythonKeepsSearch()) {
                 // Bring the search results back from memory: no new search.
-                staleItems = state.items
+                waitSeq = state.seq + 1
                 resultsFrom = Section.SEARCH
                 TerminalHub.runCommand("viewrestore")
             } else if (lastQuery.isNotEmpty()) {
@@ -429,7 +440,7 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                     ) { Text(stringResource(R.string.history_clear), fontSize = 12.sp) }
                 }
             }
-            if (state.busy || !state.ready) {
+            if (state.busy || !state.ready || waiting) {
                 LinearProgressIndicator(Modifier.fillMaxWidth(), color = ACCENT, trackColor = Color(0xFF2A2A2A))
             }
             if (shownMessage.isNotEmpty()) {
@@ -446,7 +457,7 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                     onClear = { TerminalPreferences.clearSearches(ctx) },
                     modifier = Modifier.weight(1f).fillMaxWidth()
                 )
-            } else if (state.ready && shownItems.isEmpty()) {
+            } else if (state.ready && shownItems.isEmpty() && !waiting) {
                 Box(Modifier.weight(1f).fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
                     Text(
                         stringResource(

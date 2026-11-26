@@ -1,4 +1,5 @@
 """Structured view of the yewtube session for the native client."""
+import itertools
 import json
 import math
 import re
@@ -6,6 +7,8 @@ import sys
 
 _ANSI = re.compile(r"\x1b\[[0-9;?%]*[A-Za-z]")
 _INITIAL = "Enter /search-term to search or [h]elp"
+# Grows with every snapshot, so the client can tell a fresh list from an identical earlier one.
+_seq = itertools.count(1)
 
 
 def _text(value):
@@ -51,7 +54,7 @@ def snapshot():
     total = int(g.result_count or 0)
     return json.dumps({"mode": g.browse_mode, "page": int(g.current_page or 0),
                        "pages": math.ceil(total / size) if total else 0, "total": total,
-                       "items": items, "message": message}, ensure_ascii=False)
+                       "items": items, "message": message, "seq": next(_seq)}, ensure_ascii=False)
 
 
 def queue():

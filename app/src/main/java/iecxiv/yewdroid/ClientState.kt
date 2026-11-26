@@ -23,7 +23,9 @@ data class ClientState(
     val items: List<ClientItem> = emptyList(),
     val message: String = "",
     val busy: Boolean = false,
-    val ready: Boolean = false
+    val ready: Boolean = false,
+    /** Counts the snapshots taken, so an identical list read again is still told apart. */
+    val seq: Int = 0
 )
 
 /** One track of the playback queue. */
@@ -74,7 +76,8 @@ fun parseClientState(raw: String): ClientState {
         items = items,
         message = json.optString("message"),
         busy = false,
-        ready = true
+        ready = true,
+        seq = json.optInt("seq")
     )
 }
 
