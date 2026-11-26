@@ -84,6 +84,13 @@ private const val AUTO_HIDE_MS = 3000L
 
 class MainActivity : ComponentActivity() {
     private var future: ListenableFuture<MediaController>? = null
+    // The app language this instance was created with; when Settings changes it, the screen is recreated.
+    private var language = AppLanguage.SYSTEM
+
+    override fun attachBaseContext(newBase: Context) {
+        language = AppLanguage.saved(newBase)
+        super.attachBaseContext(AppLanguage.wrap(newBase))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -95,6 +102,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         setVolumeControlStream(AudioManager.STREAM_MUSIC)
+        if (AppLanguage.saved(this) != language) recreate()
     }
 
     override fun onDestroy() {
