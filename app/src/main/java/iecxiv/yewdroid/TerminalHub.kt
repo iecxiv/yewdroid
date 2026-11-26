@@ -37,8 +37,6 @@ interface TermSink {
     fun stopPlayback()
     /** yewtube is waiting for a command (the native client refreshes its results). */
     fun idle()
-    /** The download queue changed (JSON from yt_downloads.py). */
-    fun downloads(json: String)
 }
 
 /** Public named class so Chaquopy can call it from Python. */
@@ -51,7 +49,6 @@ class HubSink : TermSink {
     override fun mode(playing: Boolean) { TerminalHub.playing.value = playing }
     override fun stopPlayback() { TerminalHub.onStopPlayback() }
     override fun idle() { TerminalHub.onIdle() }
-    override fun downloads(json: String) { TerminalHub.onDownloads(json) }
 }
 
 object TerminalHub {
@@ -64,8 +61,6 @@ object TerminalHub {
     val queue: StateFlow<QueueState> = _queue
     private val _playlists = MutableStateFlow(PlaylistsState())
     val playlists: StateFlow<PlaylistsState> = _playlists
-    private val _downloads = MutableStateFlow<List<DownloadJob>>(emptyList())
-    val downloads: StateFlow<List<DownloadJob>> = _downloads
     val playing = MutableStateFlow(false)
     val audioOn = MutableStateFlow(false)
     val nowPlaying = MutableStateFlow("")
@@ -146,7 +141,6 @@ object TerminalHub {
         scope.launch {
             val m = Python.getInstance().getModule("yt_term")
             Python.getInstance().getModule("terminal_layout").callAttr("install", m)
-            runCatching { Python.getInstance().getModule("yt_downloads").callAttr("install", m) }
             val enabled = runCatching { TerminalPreferences.translateOutput(app).first() }.getOrDefault(false)
             val choice = runCatching { TerminalPreferences.terminalLanguage(app).first() }.getOrDefault("system")
             val available = runCatching {
@@ -245,41 +239,6 @@ object TerminalHub {
                     Python.getInstance().getModule("yt_client").callAttr("playlists").toString()
                 )
             }
-        }
-    }
-
-    /** The download queue changed in Python. */
-    fun onDownloads(json: String) {
-        runCatching { _downloads.value = parseDownloads(json) }
-    }
-
-    /** Lists the audio and video formats yt-dlp offers for [ytid] (a network call). */
-    suspend fun loadFormats(ytid: String): Result<DownloadFormats> = withContext(Dispatchers.IO) {
-        runCatching {
-            parseFormats(
-                Python.getInstance().getModule("yt_downloads").callAttr("formats", ytid).toString()
-            )
-        }
-    }
-
-    fun enqueueDownload(ytid: String, title: String, kind: String, choice: String, label: String) {
-        scope.launch {
-            runCatching {
-                Python.getInstance().getModule("yt_downloads")
-                    .callAttr("enqueue", ytid, title, kind, choice, label)
-            }
-        }
-    }
-
-    fun cancelDownload(id: Int) {
-        scope.launch {
-            runCatching { Python.getInstance().getModule("yt_downloads").callAttr("cancel", id) }
-        }
-    }
-
-    fun clearFinishedDownloads() {
-        scope.launch {
-            runCatching { Python.getInstance().getModule("yt_downloads").callAttr("clear_finished") }
         }
     }
 
