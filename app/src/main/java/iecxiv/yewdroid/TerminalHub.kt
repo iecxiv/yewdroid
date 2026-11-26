@@ -139,14 +139,32 @@ object TerminalHub {
         exo = null
     }
 
+    /**
+     * Moving the video to another view (mini player, expanded player, fullscreen) gives the player a new
+     * surface. If the track then starts over, it is put back where it was a moment before.
+     */
     fun attachSurface(view: SurfaceView) {
         surface = view
-        exo?.setVideoSurfaceView(view)
+        val p = exo ?: return
+        val position = p.currentPosition
+        val title = nowPlaying.value
+        p.setVideoSurfaceView(view)
+        keepPosition(position, title)
     }
 
     fun detachSurface(view: SurfaceView) {
         if (surface === view) surface = null
         exo?.clearVideoSurfaceView(view)
+    }
+
+    private fun keepPosition(position: Long, title: String) {
+        if (position < 3000L || !playing.value) return
+        main.postDelayed({
+            val p = exo ?: return@postDelayed
+            if (playing.value && nowPlaying.value == title && p.currentPosition + 2000L < position) {
+                p.seekTo(position)
+            }
+        }, 1000L)
     }
 
     @Synchronized

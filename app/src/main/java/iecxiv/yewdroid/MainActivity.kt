@@ -169,14 +169,16 @@ fun TerminalScreen() {
     val translationAvailable by TerminalHub.translationAvailable.collectAsState()
     val translated by TerminalHub.translated.collectAsState()
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
-    // Fullscreen follows the rotation: landscape with a video shows it fullscreen, portrait shows it inline.
+    // Fullscreen follows the rotation, but only where the video is on screen: in the terminal, or in the
+    // expanded player of the UI. Landscape with a video there shows it fullscreen, portrait shows it inline.
     // [manualFull] is the fullscreen button used in portrait (it forces landscape until the user exits);
     // [dismissed] is the exit button used while the phone is already held in landscape.
     var manualFull by rememberSaveable { mutableStateOf(false) }
     var dismissed by rememberSaveable { mutableStateOf(false) }
     var playerOpen by rememberSaveable { mutableStateOf(false) }
     val showVideo = playing && videoOn
-    val isFull = showVideo && (manualFull || (landscape && !dismissed))
+    val videoVisible = showVideo && (terminalMode || playerOpen)
+    val isFull = showVideo && (manualFull || (landscape && !dismissed && videoVisible))
     FullscreenEffect(isFull, manualFull)
     LaunchedEffect(landscape) { if (!landscape) dismissed = false }
     LaunchedEffect(showVideo) {
