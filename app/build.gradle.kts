@@ -6,10 +6,15 @@ plugins {
 }
 
 val enableFfmpeg = providers.gradleProperty("enableFfmpeg").map { it.toBooleanStrict() }.getOrElse(false)
-val ffmpegSource = providers.gradleProperty("ffmpegSource").orElse(providers.environmentVariable("FFMPEG_SOURCE"))
-val lameSource = providers.gradleProperty("lameSource").orElse(providers.environmentVariable("LAME_SOURCE"))
-val oggSource = providers.gradleProperty("oggSource").orElse(providers.environmentVariable("OGG_SOURCE"))
-val vorbisSource = providers.gradleProperty("vorbisSource").orElse(providers.environmentVariable("VORBIS_SOURCE"))
+
+// Sources fetched by tools/prepare-media-sources.py; each can be overridden by a property or variable.
+val mediaSourcesDir = rootProject.layout.projectDirectory.dir("build/media-sources/verified").asFile
+fun verified(name: String): String = mediaSourcesDir.resolve(name).absolutePath
+val explicitFfmpegSource = providers.gradleProperty("ffmpegSource").orElse(providers.environmentVariable("FFMPEG_SOURCE"))
+val ffmpegSource = explicitFfmpegSource.orElse(verified("ffmpeg-9.1"))
+val lameSource = providers.gradleProperty("lameSource").orElse(providers.environmentVariable("LAME_SOURCE")).orElse(verified("lame-3.100"))
+val oggSource = providers.gradleProperty("oggSource").orElse(providers.environmentVariable("OGG_SOURCE")).orElse(verified("libogg-1.3.6"))
+val vorbisSource = providers.gradleProperty("vorbisSource").orElse(providers.environmentVariable("VORBIS_SOURCE")).orElse(verified("libvorbis-1.3.7"))
 val ffmpegNdk = providers.gradleProperty("ffmpegNdk").orElse(providers.environmentVariable("ANDROID_NDK_HOME"))
 
 // FFmpeg binaries built by tools/build-ffmpeg-android.sh; once they exist they are packaged by every build.
@@ -19,6 +24,16 @@ fun ffmpegBuilt(): Boolean = ffmpegAbis.all { abi ->
     listOf("libffmpeg.so", "libffprobe.so").all { ffmpegLibsDir.get().asFile.resolve("$abi/$it").isFile }
 }
 val packageFfmpeg = enableFfmpeg || ffmpegBuilt()
+
+fun missingTools(vararg names: String): List<String> = names.filter { name ->
+    try {
+        val process = ProcessBuilder("bash", "-c", "command -v $name").redirectErrorStream(true).start()
+        process.inputStream.readBytes()
+        process.waitFor() != 0
+    } catch (_: Exception) {
+        true
+    }
+}
 
 android {
     namespace = "iecxiv.yewdroid"
@@ -68,37 +83,62 @@ val buildQuickJs by tasks.registering(Exec::class) {
 }
 tasks.named("preBuild") { dependsOn(buildQuickJs) }
 
+/** The newest Linux NDK installed in the Android SDK (Android Studio's SDK Manager), if any. */
+fun installedNdk(): String? {
+    fun rank(name: String) = name.split('.').take(3).fold(0L) { total, part -> total * 1000 + (part.toLongOrNull() ?: 0L) }
+    return quickJsSdk.get().asFile.resolve("ndk").listFiles()
+        ?.filter { it.resolve("toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar").isFile }
+        ?.maxByOrNull { rank(it.name) }
+        ?.absolutePath
+}
+
 if (enableFfmpeg) {
+    val prepareMediaSources by tasks.registering(Exec::class) {
+        group = "build"
+        description = "Download and verify the FFmpeg, LAME, libogg and libvorbis sources"
+        workingDir(rootProject.projectDir)
+        commandLine("python3", rootProject.file("tools/prepare-media-sources.py").absolutePath)
+        onlyIf { !ffmpegBuilt() && !mediaSourcesDir.exists() && !explicitFfmpegSource.isPresent }
+        doFirst {
+            val missing = missingTools("python3", "gpg")
+            if (missing.isNotEmpty()) {
+                throw GradleException("Missing tools: ${missing.joinToString()}. Install them with: sudo apt install python3 gnupg")
+            }
+        }
+    }
     val buildFfmpeg by tasks.registering(Exec::class) {
         group = "build"
-        description = "Build Android FFmpeg and ffprobe with LAME, libogg and libvorbis from supplied sources"
+        description = "Build Android FFmpeg and ffprobe with LAME, libogg and libvorbis from the verified sources"
         workingDir(rootProject.projectDir)
         commandLine("bash", rootProject.file("tools/build-ffmpeg-android.sh").absolutePath)
+        dependsOn(prepareMediaSources)
         // Already built: delete app/build/generated/ffmpeg to force a rebuild.
         onlyIf { !ffmpegBuilt() }
         doFirst {
-            val ffmpeg = ffmpegSource.orNull ?: throw GradleException("Define -PffmpegSource or FFMPEG_SOURCE")
-            val lame = lameSource.orNull ?: throw GradleException("Define -PlameSource or LAME_SOURCE")
-            val ogg = oggSource.orNull ?: throw GradleException("Define -PoggSource or OGG_SOURCE")
-            val vorbis = vorbisSource.orNull ?: throw GradleException("Define -PvorbisSource or VORBIS_SOURCE")
-            val ndk = ffmpegNdk.orNull ?: throw GradleException("Define -PffmpegNdk or ANDROID_NDK_HOME")
-            val ffmpegDir = rootProject.file(ffmpeg)
-            val lameDir = rootProject.file(lame)
-            val oggDir = rootProject.file(ogg)
-            val vorbisDir = rootProject.file(vorbis)
+            val missing = missingTools("make", "pkg-config", "python3")
+            if (missing.isNotEmpty()) {
+                throw GradleException("Missing tools: ${missing.joinToString()}. Install them with: sudo apt install make pkg-config python3")
+            }
+            val ndk = ffmpegNdk.orNull ?: installedNdk()
+                ?: throw GradleException("No Linux NDK found. Install one from Android Studio (SDK Manager > SDK Tools > NDK) or define -PffmpegNdk")
             val ndkDir = rootProject.file(ndk)
-            val sources = listOf(ffmpegDir, lameDir, oggDir, vorbisDir)
-            if (sources.any { !it.resolve("configure").isFile }) {
-                throw GradleException("FFmpeg, LAME, libogg and libvorbis require source trees extracted with configure")
-            }
             if (!ndkDir.resolve("toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar").isFile) {
-                throw GradleException("Invalid Linux NDK for the FFmpeg script")
+                throw GradleException("Invalid Linux NDK for the FFmpeg script: $ndk")
             }
-            environment("FFMPEG_SOURCE", ffmpegDir.absolutePath)
-            environment("LAME_SOURCE", lameDir.absolutePath)
-            environment("OGG_SOURCE", oggDir.absolutePath)
-            environment("VORBIS_SOURCE", vorbisDir.absolutePath)
+            val sources = mapOf(
+                "FFMPEG_SOURCE" to rootProject.file(ffmpegSource.get()),
+                "LAME_SOURCE" to rootProject.file(lameSource.get()),
+                "OGG_SOURCE" to rootProject.file(oggSource.get()),
+                "VORBIS_SOURCE" to rootProject.file(vorbisSource.get())
+            )
+            sources.forEach { (variable, dir) ->
+                if (!dir.resolve("configure").isFile) {
+                    throw GradleException("$variable has no configure script: $dir")
+                }
+                environment(variable, dir.absolutePath)
+            }
             environment("ANDROID_NDK_HOME", ndkDir.absolutePath)
+            environment("JOBS", Runtime.getRuntime().availableProcessors().coerceIn(2, 6).toString())
         }
     }
     tasks.named("preBuild") { dependsOn(buildFfmpeg) }
