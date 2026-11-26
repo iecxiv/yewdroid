@@ -39,6 +39,16 @@ data class QueueState(
     val index: Int = 0
 )
 
+/** A saved local playlist; [n] is the number the open/play/rmp commands use. */
+data class PlaylistItem(
+    val n: Int,
+    val name: String,
+    val count: Int = 0,
+    val duration: String = ""
+)
+
+data class PlaylistsState(val items: List<PlaylistItem> = emptyList())
+
 /** Parses the JSON produced by yt_client.snapshot(). */
 fun parseClientState(raw: String): ClientState {
     val json = JSONObject(raw)
@@ -82,4 +92,18 @@ fun parseQueueState(raw: String): QueueState {
         )
     }
     return QueueState(items = items, index = json.optInt("index"))
+}
+
+/** Parses the JSON produced by yt_client.playlists(). */
+fun parsePlaylistsState(raw: String): PlaylistsState {
+    val array = JSONObject(raw).optJSONArray("items") ?: JSONArray()
+    return PlaylistsState(List(array.length()) { index ->
+        val item = array.getJSONObject(index)
+        PlaylistItem(
+            n = item.optInt("n"),
+            name = item.optString("name"),
+            count = item.optInt("count"),
+            duration = item.optString("duration")
+        )
+    })
 }

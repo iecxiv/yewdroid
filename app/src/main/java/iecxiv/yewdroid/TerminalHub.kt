@@ -59,6 +59,8 @@ object TerminalHub {
     val client: StateFlow<ClientState> = _client
     private val _queue = MutableStateFlow(QueueState())
     val queue: StateFlow<QueueState> = _queue
+    private val _playlists = MutableStateFlow(PlaylistsState())
+    val playlists: StateFlow<PlaylistsState> = _playlists
     val playing = MutableStateFlow(false)
     val audioOn = MutableStateFlow(false)
     val nowPlaying = MutableStateFlow("")
@@ -211,7 +213,7 @@ object TerminalHub {
         }
     }
 
-    /** Called when yewtube waits for a command: refresh the native client's results. */
+    /** Called when yewtube waits for a command: refresh the native client's results and playlists. */
     fun onIdle() {
         scope.launch {
             _client.value = runCatching {
@@ -219,6 +221,11 @@ object TerminalHub {
                     Python.getInstance().getModule("yt_client").callAttr("snapshot").toString()
                 )
             }.getOrElse { _client.value.copy(busy = false, ready = true) }
+            runCatching {
+                _playlists.value = parsePlaylistsState(
+                    Python.getInstance().getModule("yt_client").callAttr("playlists").toString()
+                )
+            }
         }
     }
 

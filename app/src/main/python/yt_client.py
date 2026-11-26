@@ -79,3 +79,14 @@ def jump(index):
     player.song_no = index - 1
     player.finish("next")
     return True
+
+
+def playlists():
+    """JSON with the saved local playlists, numbered as the open/play/rmp commands expect."""
+    from mps_youtube import g
+    items = []
+    for number, name in enumerate(sorted(g.userpl), 1):
+        playlist = g.userpl[name]
+        items.append({"n": number, "name": name, "count": len(playlist),
+                      "duration": _text(getattr(playlist, "duration", ""))})
+    return json.dumps({"items": items}, ensure_ascii=False)

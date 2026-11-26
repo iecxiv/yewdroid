@@ -64,18 +64,28 @@ private val MUTED = Color(0xFF7F848E)
 private const val CLIENT_COLS = 100
 private const val CLIENT_ROWS = 24
 
+/** Tabs of the native client. */
+private enum class Section(val label: Int) {
+    SEARCH(R.string.client_tab_search),
+    PLAYLISTS(R.string.client_tab_playlists),
+    HISTORY(R.string.client_tab_history)
+}
+
 /**
  * yewtube selection for result n: "n-" plays n and queues the rest of the page, "n" plays only n.
  */
 private fun selection(n: Int, queueRest: Boolean) = if (queueRest) "$n-" else "$n"
 
-/** Per-item actions: label to the yewtube command for result number n (queueRest = auto-queue on). */
-private val ITEM_ACTIONS: List<Pair<Int, (Int, Boolean) -> String>> = listOf(
+/** Menu actions before "Add to playlist": label to the yewtube command for result number n. */
+private val PLAY_ACTIONS: List<Pair<Int, (Int, Boolean) -> String>> = listOf(
     R.string.client_play_audio to { n, queueRest -> "${selection(n, queueRest)} -a" },
     R.string.client_play_video to { n, queueRest -> "${selection(n, queueRest)} -w" },
     R.string.client_download_audio to { n, _ -> "da $n" },
-    R.string.client_download_video to { n, _ -> "dv $n" },
-    R.string.client_add to { n, _ -> "add $n" },
+    R.string.client_download_video to { n, _ -> "dv $n" }
+)
+
+/** Menu actions after "Add to playlist". */
+private val OTHER_ACTIONS: List<Pair<Int, (Int, Boolean) -> String>> = listOf(
     R.string.client_share to { n, _ -> "share $n" },
     R.string.client_open_with to { n, _ -> "openwith $n" },
     R.string.client_more_from to { n, _ -> "u $n" }
@@ -89,7 +99,11 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     val focus = LocalFocusManager.current
     val state by TerminalHub.client.collectAsState()
     var query by rememberSaveable { mutableStateOf("") }
+    var section by rememberSaveable { mutableStateOf(Section.SEARCH) }
     var focused by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
+    var adding by remember { mutableStateOf<Int?>(null) }
+    var clearingHistory by remember { mutableStateOf(false) }
     val autoQueueFlow = remember(ctx.applicationContext) { TerminalPreferences.clientAutoQueue(ctx.applicationContext) }
     val savedAutoQueue by autoQueueFlow.collectAsState(initial = null)
     var selectedAutoQueue by remember { mutableStateOf<Boolean?>(null) }
@@ -101,7 +115,7 @@ fun ClientScreen(modifier: Modifier = Modifier) {
         if (typed.isEmpty()) searches
         else searches.filter { it.contains(typed, ignoreCase = true) && !it.equals(typed, ignoreCase = true) }
     }
-    val showHistory = focused && suggestions.isNotEmpty()
+    val showHistory = section == Section.SEARCH && focused && suggestions.isNotEmpty()
     LaunchedEffect(Unit) {
         TerminalHub.ensureStarted(ctx.applicationContext, CLIENT_COLS, CLIENT_ROWS)
     }
@@ -115,120 +129,203 @@ fun ClientScreen(modifier: Modifier = Modifier) {
         }
     }
 
+    fun select(target: Section) {
+        focus.clearFocus()
+        focused = false
+        if (target == Section.HISTORY && section != Section.HISTORY) TerminalHub.runCommand("history")
+        section = target
+    }
+
     val searchStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp, color = Color.White)
     val small = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = MUTED)
     Column(modifier) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            BasicTextField(
-                value = query,
-                onValueChange = { query = it },
-                modifier = Modifier.weight(1f).padding(vertical = 4.dp)
-                    .onFocusChanged { focused = it.hasFocus }
-                    .border(1.dp, ACCENT, RoundedCornerShape(6.dp))
-                    .padding(horizontal = 10.dp, vertical = 10.dp),
-                singleLine = true,
-                textStyle = searchStyle,
-                cursorBrush = SolidColor(ACCENT),
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.None,
-                    autoCorrectEnabled = false,
-                    imeAction = ImeAction.Search
-                ),
-                keyboardActions = KeyboardActions(onSearch = { search() }),
-                decorationBox = { inner ->
-                    Box(Modifier.fillMaxWidth()) {
-                        if (query.isEmpty()) Text(stringResource(R.string.client_search_hint), style = small)
-                        inner()
-                    }
-                }
-            )
-            IconButton(onClick = { search() }) {
-                Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.client_search), tint = FG)
-            }
-        }
-        if (autoQueue != null) {
-            Row(
-                Modifier.fillMaxWidth()
-                    .clickable {
-                        val value = !autoQueue
-                        selectedAutoQueue = value
-                        TerminalPreferences.saveClientAutoQueue(ctx, value)
-                    }
-                    .padding(horizontal = 12.dp, vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Switch(
-                    checked = autoQueue,
-                    onCheckedChange = null,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = BG,
-                        checkedTrackColor = ACCENT,
-                        checkedBorderColor = ACCENT,
-                        uncheckedThumbColor = FG,
-                        uncheckedTrackColor = Color(0xFF2A2A2A),
-                        uncheckedBorderColor = Color(0xFF555555)
-                    )
-                )
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+            Section.values().forEach { tab ->
                 Text(
-                    stringResource(R.string.client_autoqueue),
-                    style = small.copy(color = FG),
-                    modifier = Modifier.padding(start = 10.dp)
+                    stringResource(tab.label),
+                    style = small.copy(
+                        color = if (section == tab) ACCENT else MUTED,
+                        textAlign = TextAlign.Center
+                    ),
+                    modifier = Modifier.weight(1f).clickable { select(tab) }.padding(vertical = 10.dp)
                 )
             }
         }
-        if (state.busy || !state.ready) {
-            LinearProgressIndicator(Modifier.fillMaxWidth(), color = ACCENT, trackColor = Color(0xFF2A2A2A))
-        }
-        if (state.message.isNotEmpty()) {
-            Text(state.message, style = small.copy(color = ACCENT), modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
-        }
-        if (showHistory) {
-            SearchHistoryPanel(
-                entries = suggestions,
-                onPick = { entry ->
-                    query = entry
-                    search()
-                },
-                onRemove = { TerminalPreferences.removeSearch(ctx, it) },
-                onClear = { TerminalPreferences.clearSearches(ctx) },
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF2A2A2A)))
+        if (section == Section.PLAYLISTS) {
+            PlaylistsScreen(
+                onOpened = { section = Section.SEARCH },
                 modifier = Modifier.weight(1f).fillMaxWidth()
             )
-        } else if (state.ready && state.items.isEmpty()) {
-            Box(Modifier.weight(1f).fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                Text(stringResource(R.string.client_empty), style = small.copy(textAlign = TextAlign.Center))
-            }
         } else {
-            LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
-                items(state.items, key = { "${it.n}-${it.id}" }) { item ->
-                    ResultRow(item, playlist = state.mode == "ytpl", queueRest = autoQueue ?: true)
+            if (section == Section.SEARCH) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    BasicTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        modifier = Modifier.weight(1f).padding(vertical = 4.dp)
+                            .onFocusChanged { focused = it.hasFocus }
+                            .border(1.dp, ACCENT, RoundedCornerShape(6.dp))
+                            .padding(horizontal = 10.dp, vertical = 10.dp),
+                        singleLine = true,
+                        textStyle = searchStyle,
+                        cursorBrush = SolidColor(ACCENT),
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.None,
+                            autoCorrectEnabled = false,
+                            imeAction = ImeAction.Search
+                        ),
+                        keyboardActions = KeyboardActions(onSearch = { search() }),
+                        decorationBox = { inner ->
+                            Box(Modifier.fillMaxWidth()) {
+                                if (query.isEmpty()) Text(stringResource(R.string.client_search_hint), style = small)
+                                inner()
+                            }
+                        }
+                    )
+                    IconButton(onClick = { search() }) {
+                        Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.client_search), tint = FG)
+                    }
                 }
             }
-        }
-        if (!showHistory && state.pages > 1) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                val hasPrevious = state.page > 0
-                val hasNext = state.page + 1 < state.pages
-                IconButton(onClick = { TerminalHub.runCommand("p") }, enabled = hasPrevious) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                        contentDescription = stringResource(R.string.client_prev),
-                        tint = if (hasPrevious) FG else MUTED
+            if (autoQueue != null) {
+                Row(
+                    Modifier.fillMaxWidth()
+                        .clickable {
+                            val value = !autoQueue
+                            selectedAutoQueue = value
+                            TerminalPreferences.saveClientAutoQueue(ctx, value)
+                        }
+                        .padding(start = 12.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Switch(
+                        checked = autoQueue,
+                        onCheckedChange = null,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = BG,
+                            checkedTrackColor = ACCENT,
+                            checkedBorderColor = ACCENT,
+                            uncheckedThumbColor = FG,
+                            uncheckedTrackColor = Color(0xFF2A2A2A),
+                            uncheckedBorderColor = Color(0xFF555555)
+                        )
                     )
+                    Text(
+                        stringResource(R.string.client_autoqueue),
+                        style = small.copy(color = FG),
+                        modifier = Modifier.padding(start = 10.dp).weight(1f)
+                    )
+                    if (section == Section.SEARCH && state.mode == "normal" && state.items.isNotEmpty()) {
+                        TextButton(
+                            onClick = { saving = true },
+                            colors = ButtonDefaults.textButtonColors(contentColor = ACCENT)
+                        ) { Text(stringResource(R.string.client_save_playlist), fontSize = 12.sp) }
+                    }
                 }
-                Text(
-                    stringResource(R.string.client_page, state.page + 1, state.pages),
-                    style = small.copy(textAlign = TextAlign.Center),
-                    modifier = Modifier.weight(1f)
+            }
+            if (section == Section.HISTORY) {
+                Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.client_tab_history), style = small.copy(color = ACCENT), modifier = Modifier.weight(1f))
+                    TextButton(
+                        onClick = { clearingHistory = true },
+                        colors = ButtonDefaults.textButtonColors(contentColor = ACCENT)
+                    ) { Text(stringResource(R.string.history_clear), fontSize = 12.sp) }
+                }
+            }
+            if (state.busy || !state.ready) {
+                LinearProgressIndicator(Modifier.fillMaxWidth(), color = ACCENT, trackColor = Color(0xFF2A2A2A))
+            }
+            if (state.message.isNotEmpty()) {
+                Text(state.message, style = small.copy(color = ACCENT), modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+            }
+            if (showHistory) {
+                SearchHistoryPanel(
+                    entries = suggestions,
+                    onPick = { entry ->
+                        query = entry
+                        search()
+                    },
+                    onRemove = { TerminalPreferences.removeSearch(ctx, it) },
+                    onClear = { TerminalPreferences.clearSearches(ctx) },
+                    modifier = Modifier.weight(1f).fillMaxWidth()
                 )
-                IconButton(onClick = { TerminalHub.runCommand("n") }, enabled = hasNext) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = stringResource(R.string.client_next),
-                        tint = if (hasNext) FG else MUTED
+            } else if (state.ready && state.items.isEmpty()) {
+                Box(Modifier.weight(1f).fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                    Text(
+                        stringResource(if (section == Section.HISTORY) R.string.history_empty else R.string.client_empty),
+                        style = small.copy(textAlign = TextAlign.Center)
                     )
+                }
+            } else {
+                LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
+                    items(state.items, key = { "${it.n}-${it.id}" }) { item ->
+                        ResultRow(
+                            item,
+                            playlist = state.mode == "ytpl",
+                            queueRest = autoQueue ?: true,
+                            onAdd = { adding = it }
+                        )
+                    }
+                }
+            }
+            if (!showHistory && state.pages > 1) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    val hasPrevious = state.page > 0
+                    val hasNext = state.page + 1 < state.pages
+                    IconButton(onClick = { TerminalHub.runCommand("p") }, enabled = hasPrevious) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                            contentDescription = stringResource(R.string.client_prev),
+                            tint = if (hasPrevious) FG else MUTED
+                        )
+                    }
+                    Text(
+                        stringResource(R.string.client_page, state.page + 1, state.pages),
+                        style = small.copy(textAlign = TextAlign.Center),
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = { TerminalHub.runCommand("n") }, enabled = hasNext) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = stringResource(R.string.client_next),
+                            tint = if (hasNext) FG else MUTED
+                        )
+                    }
                 }
             }
         }
+    }
+    if (saving) {
+        NameDialog(
+            title = stringResource(R.string.playlist_save_title),
+            confirmLabel = stringResource(R.string.playlist_save_confirm),
+            onConfirm = { name ->
+                TerminalHub.runCommand("save $name")
+                saving = false
+            },
+            onDismiss = { saving = false }
+        )
+    }
+    adding?.let { number ->
+        AddToPlaylistDialog(
+            onPick = { name ->
+                TerminalHub.runCommand("add $number $name")
+                adding = null
+            },
+            onDismiss = { adding = null }
+        )
+    }
+    if (clearingHistory) {
+        ConfirmDialog(
+            title = stringResource(R.string.history_clear_confirm),
+            confirmLabel = stringResource(R.string.history_clear),
+            onConfirm = {
+                TerminalHub.runCommand("history clear")
+                clearingHistory = false
+            },
+            onDismiss = { clearingHistory = false }
+        )
     }
 }
 
@@ -278,7 +375,7 @@ private fun SearchHistoryPanel(
 }
 
 @Composable
-private fun ResultRow(item: ClientItem, playlist: Boolean, queueRest: Boolean) {
+private fun ResultRow(item: ClientItem, playlist: Boolean, queueRest: Boolean, onAdd: (Int) -> Unit) {
     var menu by remember { mutableStateOf(false) }
     val titleStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = FG)
     val subtitleStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = MUTED)
@@ -323,7 +420,23 @@ private fun ResultRow(item: ClientItem, playlist: Boolean, queueRest: Boolean) {
                     Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.client_more_options), tint = FG)
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    ITEM_ACTIONS.forEach { (label, command) ->
+                    PLAY_ACTIONS.forEach { (label, command) ->
+                        DropdownMenuItem(
+                            text = { Text(stringResource(label)) },
+                            onClick = {
+                                menu = false
+                                TerminalHub.runCommand(command(item.n, queueRest))
+                            }
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.client_add)) },
+                        onClick = {
+                            menu = false
+                            onAdd(item.n)
+                        }
+                    )
+                    OTHER_ACTIONS.forEach { (label, command) ->
                         DropdownMenuItem(
                             text = { Text(stringResource(label)) },
                             onClick = {
