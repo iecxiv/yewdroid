@@ -51,6 +51,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.chaquo.python.Python
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
@@ -93,6 +94,11 @@ private val OTHER_ACTIONS: List<Pair<Int, (Int, Boolean) -> String>> = listOf(
 
 private val thumbnails = LruCache<String, ImageBitmap>(120)
 
+/** Asks the Python session whether the search results are being kept aside (see android_views.py). */
+private fun pythonKeepsSearch(): Boolean = runCatching {
+    Python.getInstance().getModule("android_views").callAttr("has_stash").toBoolean()
+}.getOrDefault(false)
+
 @Composable
 fun ClientScreen(modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
@@ -105,8 +111,10 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     var section by rememberSaveable { mutableStateOf(Section.SEARCH) }
     // Which tab produced the results yewtube currently holds (history and playlists replace the search results).
     var resultsFrom by rememberSaveable { mutableStateOf(Section.SEARCH) }
-    // True once the search results were put aside (viewstash) before History or a playlist replaced them.
-    var searchKept by rememberSaveable { mutableStateOf(false) }
+    // Last search sent; repeated when the search results kept aside no longer exist (e.g. the app process restarted).
+    var lastQuery by rememberSaveable { mutableStateOf("") }
+    // True once the search results were put aside (viewstash) during this screen's life.
+    var searchKept by remember { mutableStateOf(false) }
     // Name of the saved playlist shown inside the Playlists tab, if one is open.
     var openedPlaylist by rememberSaveable { mutableStateOf<String?>(null) }
     // Result list being replaced by a new command: hidden until the new results arrive.
@@ -163,6 +171,7 @@ fun ClientScreen(modifier: Modifier = Modifier) {
         val text = query.trim().trimStart('.', '/').trim()
         if (text.isNotEmpty()) {
             focus.clearFocus()
+            lastQuery = text
             TerminalPreferences.addSearch(ctx, text)
             replaceResults(Section.SEARCH, "/$text")
         }
@@ -175,11 +184,16 @@ fun ClientScreen(modifier: Modifier = Modifier) {
         openedPlaylist = null
         if (target == Section.HISTORY && section != Section.HISTORY) {
             replaceResults(Section.HISTORY, "history")
-        } else if (target == Section.SEARCH && resultsFrom != Section.SEARCH && searchKept) {
-            // Bring the search results back from memory: no new search.
-            staleItems = state.items
-            resultsFrom = Section.SEARCH
-            TerminalHub.runCommand("viewrestore")
+        } else if (target == Section.SEARCH && resultsFrom != Section.SEARCH) {
+            if (searchKept || pythonKeepsSearch()) {
+                // Bring the search results back from memory: no new search.
+                staleItems = state.items
+                resultsFrom = Section.SEARCH
+                TerminalHub.runCommand("viewrestore")
+            } else if (lastQuery.isNotEmpty()) {
+                // The kept results are gone (the process restarted): search again.
+                replaceResults(Section.SEARCH, "/$lastQuery")
+            }
         }
         section = target
     }
@@ -401,7 +415,12 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     adding?.let { number ->
         AddToPlaylistDialog(
             onPick = { name ->
-                TerminalHub.runCommand("pladd $name $number")
+                if (section == Section.PLAYLISTS && name == openedPlaylist) {
+                    // Adding to the playlist being shown: reload it so the new entry appears.
+                    TerminalHub.runCommands("pladd $name $number", "plreload $name")
+                } else {
+                    TerminalHub.runCommand("pladd $name $number")
+                }
                 adding = null
             },
             onDismiss = { adding = null }
