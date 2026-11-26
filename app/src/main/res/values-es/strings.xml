@@ -13,11 +13,14 @@
     <string name="main_terminal">Terminal</string>
     <string name="main_client_placeholder">El cliente interactivo llegará pronto.\nActiva Terminal para usar yewtube.</string>
     <string name="main_translate_output">Traducir la salida</string>
+    <string name="header_show_options">Mostrar opciones</string>
+    <string name="header_hide_options">Ocultar opciones</string>
     <string name="pref_zoom_save_failed">[ajustes] No se pudo guardar el zoom.</string>
     <string name="pref_history_save_failed">[historial] No se pudo guardar el comando.</string>
     <string name="pref_history_read_failed">[historial] No se pudo leer el historial guardado.</string>
     <string name="pref_mode_save_failed">[ajustes] No se pudo guardar el modo.</string>
     <string name="pref_language_save_failed">[ajustes] No se pudo guardar el idioma de la salida.</string>
+    <string name="pref_header_save_failed">[ajustes] No se pudo guardar el estado de la cabecera.</string>
     <string name="terminal_resize_failed">[terminal] No se pudo actualizar el tamaño: %1$s</string>
     <string name="player_unavailable">[reproductor] el servicio de reproducción no está disponible</string>
 </resources>

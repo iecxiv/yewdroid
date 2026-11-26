@@ -28,12 +28,14 @@ object TerminalPreferences {
     private val commandHistory = stringPreferencesKey("command_history_json")
     private val terminalModeKey = booleanPreferencesKey("terminal_mode")
     private val translateKey = booleanPreferencesKey("translate_output")
+    private val headerExpandedKey = booleanPreferencesKey("header_expanded")
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val writes = Channel<Pair<Context, Float>>(Channel.CONFLATED)
     // Append commands in order: unlike zoom changes, commands must not be conflated.
     private val historyWrites = Channel<Pair<Context, String>>(Channel.UNLIMITED)
     private val modeWrites = Channel<Pair<Context, Boolean>>(Channel.CONFLATED)
     private val translateWrites = Channel<Pair<Context, Boolean>>(Channel.CONFLATED)
+    private val headerWrites = Channel<Pair<Context, Boolean>>(Channel.CONFLATED)
 
     init {
         scope.launch {
@@ -79,6 +81,16 @@ object TerminalPreferences {
                 }
             }
         }
+        scope.launch {
+            for ((context, expanded) in headerWrites) {
+                try {
+                    context.terminalDataStore.edit { it[headerExpandedKey] = expanded }
+                } catch (error: IOException) {
+                    Log.e("TerminalPreferences", "Cannot save header state", error)
+                    TerminalHub.onWrite("\n" + context.getString(R.string.pref_header_save_failed) + "\n")
+                }
+            }
+        }
     }
 
     fun zoom(context: Context): Flow<Float?> = context.applicationContext.terminalDataStore.data
@@ -121,6 +133,19 @@ object TerminalPreferences {
 
     fun saveTranslateOutput(context: Context, enabled: Boolean) {
         translateWrites.trySend(context.applicationContext to enabled)
+    }
+
+    fun headerExpanded(context: Context): Flow<Boolean?> = context.applicationContext.terminalDataStore.data
+        .catch { error ->
+            if (error is IOException) {
+                Log.e("TerminalPreferences", "Cannot read header state", error)
+                emit(emptyPreferences())
+            } else throw error
+        }
+        .map { values -> values[headerExpandedKey] ?: false }
+
+    fun saveHeaderExpanded(context: Context, expanded: Boolean) {
+        headerWrites.trySend(context.applicationContext to expanded)
     }
 
     fun history(context: Context): Flow<List<String>?> = context.applicationContext.terminalDataStore.data

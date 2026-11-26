@@ -21,6 +21,12 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,6 +38,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
@@ -46,6 +53,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalConfiguration
@@ -58,6 +66,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -104,8 +113,12 @@ fun TerminalScreen() {
     val savedHistory by historyFlow.collectAsState(initial = null)
     val modeFlow = remember(ctx.applicationContext) { TerminalPreferences.terminalMode(ctx.applicationContext) }
     val savedMode by modeFlow.collectAsState(initial = null)
+    val headerFlow = remember(ctx.applicationContext) { TerminalPreferences.headerExpanded(ctx.applicationContext) }
+    val savedHeader by headerFlow.collectAsState(initial = null)
     var selectedMode by remember { mutableStateOf<Boolean?>(null) }
     val terminalMode = selectedMode ?: savedMode
+    var selectedHeader by remember { mutableStateOf<Boolean?>(null) }
+    val headerExpanded = selectedHeader ?: savedHeader
     var selectedZoom by remember { mutableStateOf<Float?>(null) }
     val currentZoom = selectedZoom ?: savedZoom
     val uiStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = FG)
@@ -136,7 +149,7 @@ fun TerminalScreen() {
             askBatteryExemption()
         }
     }
-    if (currentZoom == null || savedHistory == null || terminalMode == null) {
+    if (currentZoom == null || savedHistory == null || terminalMode == null || headerExpanded == null) {
         Box(Modifier.fillMaxSize().background(BG).systemBarsPadding(), contentAlignment = Alignment.Center) {
             Text(stringResource(R.string.main_loading), style = uiStyle)
         }
@@ -170,6 +183,10 @@ fun TerminalScreen() {
     val charW = remember(measurer, style, density.density, density.fontScale) {
         (measurer.measure("M".repeat(64), style).size.width / 64f).coerceAtLeast(1f)
     }
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (headerExpanded) 180f else 0f,
+        label = "headerChevron"
+    )
 
     fun changeZoom(delta: Float) {
         val value = (fontSp + delta).coerceIn(7f, 20f)
@@ -195,40 +212,67 @@ fun TerminalScreen() {
 
     Column(Modifier.fillMaxSize().background(BG).systemBarsPadding().imePadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("YewDroid", color = ACCENT, style = uiStyle, modifier = Modifier.weight(1f))
+            Text(
+                "YewDroid", color = ACCENT, style = uiStyle,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
             if (terminalMode) {
                 Text("A-", color = FG, style = uiStyle, modifier = Modifier
                     .clickableNoRipple { changeZoom(-1f) }.padding(12.dp))
                 Text("A+", color = FG, style = uiStyle, modifier = Modifier
                     .clickableNoRipple { changeZoom(1f) }.padding(12.dp))
-                if (translationAvailable) {
-                    CtrlBtn(
-                        Icons.Filled.Language,
-                        if (translated) ACCENT else FG,
-                        stringResource(R.string.main_translate_output)
-                    ) {
-                        TerminalHub.setTranslated(ctx, !translated)
+            }
+            AnimatedVisibility(
+                visible = headerExpanded,
+                enter = expandHorizontally(expandFrom = Alignment.End) + fadeIn(),
+                exit = shrinkHorizontally(shrinkTowards = Alignment.End) + fadeOut()
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (terminalMode && translationAvailable) {
+                        CtrlBtn(
+                            Icons.Filled.Language,
+                            if (translated) ACCENT else FG,
+                            stringResource(R.string.main_translate_output)
+                        ) {
+                            TerminalHub.setTranslated(ctx, !translated)
+                        }
+                    }
+                    Text(
+                        stringResource(R.string.main_terminal), color = FG,
+                        style = uiStyle.copy(fontSize = 12.sp), maxLines = 1,
+                        modifier = Modifier.padding(end = 6.dp)
+                    )
+                    Switch(
+                        checked = terminalMode,
+                        onCheckedChange = {
+                            selectedMode = it
+                            TerminalPreferences.saveTerminalMode(ctx, it)
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = BG,
+                            checkedTrackColor = ACCENT,
+                            checkedBorderColor = ACCENT,
+                            uncheckedThumbColor = FG,
+                            uncheckedTrackColor = Color(0xFF2A2A2A),
+                            uncheckedBorderColor = Color(0xFF555555)
+                        )
+                    )
+                    CtrlBtn(Icons.Filled.Settings, description = stringResource(R.string.settings_title)) {
+                        ctx.startActivity(Intent(ctx, SettingsActivity::class.java))
                     }
                 }
             }
-            Text(stringResource(R.string.main_terminal), color = FG, style = uiStyle.copy(fontSize = 12.sp), modifier = Modifier.padding(end = 6.dp))
-            Switch(
-                checked = terminalMode,
-                onCheckedChange = {
-                    selectedMode = it
-                    TerminalPreferences.saveTerminalMode(ctx, it)
-                },
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = BG,
-                    checkedTrackColor = ACCENT,
-                    checkedBorderColor = ACCENT,
-                    uncheckedThumbColor = FG,
-                    uncheckedTrackColor = Color(0xFF2A2A2A),
-                    uncheckedBorderColor = Color(0xFF555555)
-                )
-            )
-            CtrlBtn(Icons.Filled.Settings, description = stringResource(R.string.settings_title)) {
-                ctx.startActivity(Intent(ctx, SettingsActivity::class.java))
+            CtrlBtn(
+                Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                description = stringResource(
+                    if (headerExpanded) R.string.header_hide_options else R.string.header_show_options
+                ),
+                rotation = chevronRotation
+            ) {
+                val value = !headerExpanded
+                selectedHeader = value
+                TerminalPreferences.saveHeaderExpanded(ctx, value)
             }
         }
 
@@ -488,9 +532,12 @@ private fun CtrlBtn(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     tint: Color = FG,
     description: String? = null,
+    rotation: Float = 0f,
     onClick: () -> Unit
 ) {
-    IconButton(onClick = onClick) { Icon(icon, contentDescription = description, tint = tint) }
+    IconButton(onClick = onClick) {
+        Icon(icon, contentDescription = description, tint = tint, modifier = Modifier.rotate(rotation))
+    }
 }
 
 private fun Modifier.clickableNoRipple(onClick: () -> Unit): Modifier =
