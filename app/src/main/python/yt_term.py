@@ -106,6 +106,17 @@ def player_event(action):
         traceback.print_exc(file=_orig_err)
 
 
+def track_started():
+    """Called by the app when the current track really starts sounding: only then it goes to the history."""
+    try:
+        from mps_youtube import config, g, history
+        p = g.PLAYER_OBJ
+        if getattr(p, "_active", False) and config.HISTORY.get:
+            history.add(p.song)
+    except Exception:
+        traceback.print_exc(file=_orig_err)
+
+
 def progress(sec):
     try:
         from mps_youtube import g
@@ -435,6 +446,20 @@ def _make_player_class(CmdPlayer):
     return androidplayer
 
 
+class _NoHistoryAdd:
+    """Stands in for the history module inside player.py: yewtube adds a track when it ends, but the
+    app records it when it starts sounding (track_started), so the player's own add is ignored."""
+
+    def __init__(self, real):
+        self._real = real
+
+    def add(self, song):
+        return None
+
+    def __getattr__(self, name):
+        return getattr(self._real, name)
+
+
 def _run(files_dir):
     try:
         _prepare_env(files_dir)
@@ -442,11 +467,13 @@ def _run(files_dir):
         _stub_readline()
         import mps_youtube.main as ymain
         from mps_youtube import g, util, screen, terminalsize
+        from mps_youtube import history as yhistory, player as yplayer
         from mps_youtube.player import CmdPlayer
 
         _patch_js_runtime()
         _patch_downloads()
         _patch_traceback()
+        yplayer.history = _NoHistoryAdd(yhistory)
 
         cls = _make_player_class(CmdPlayer)
         mod = types.ModuleType("mps_youtube.players.androidplayer")

@@ -83,6 +83,8 @@ object TerminalHub {
     @Volatile private var appContext: Context? = null
     /** Whether playback runs in its own thread (native client) instead of blocking yewtube. */
     @Volatile private var background = false
+    /** True once the current track was reported to Python as started (it then goes to the history). */
+    @Volatile private var startReported = false
     private var surface: SurfaceView? = null
     private var started = false
     private val sink = HubSink()
@@ -91,7 +93,14 @@ object TerminalHub {
         override fun onPlaybackStateChanged(state: Int) {
             if (state == Player.STATE_ENDED && playing.value) event("next")
         }
-        override fun onIsPlayingChanged(isPlaying: Boolean) { audioOn.value = isPlaying }
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            audioOn.value = isPlaying
+            // The first time a track really sounds it is recorded in the history (not when it is only queued).
+            if (isPlaying && playing.value && !startReported) {
+                startReported = true
+                scope.launch { runCatching { py?.callAttr("track_started") } }
+            }
+        }
         override fun onVideoSizeChanged(videoSize: VideoSize) {
             if (videoSize.width > 0 && videoSize.height > 0) {
                 videoAspect.value = videoSize.width * videoSize.pixelWidthHeightRatio / videoSize.height
@@ -281,6 +290,8 @@ object TerminalHub {
         videoOn.value = nextVideo
         positionMs.value = 0L
         durationMs.value = 0L
+        // A new track: it is reported to the history once it really starts sounding.
+        startReported = false
         // yewtube stays inside playback until the track ends, so it is playing, not busy.
         _client.value = _client.value.copy(busy = false)
         refreshQueue()
