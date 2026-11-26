@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="starttab_section">Pestaña de inicio</string>
+    <string name="starttab_desc">Pestaña que se muestra al abrir la app.</string>
+    <string name="dlclear_section">Lista de descargas</string>
+    <string name="dlclear_title">Borrar la lista al cerrar la app</string>
+    <string name="dlclear_desc">Quita de la lista las descargas terminadas al cerrar la app. Los archivos guardados no se borran.</string>
+</resources>

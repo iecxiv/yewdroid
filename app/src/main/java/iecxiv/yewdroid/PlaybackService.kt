@@ -71,8 +71,13 @@ class PlaybackService : MediaSessionService() {
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = session
 
-    /** Closing the app from the recents list ends playback and removes the notification. */
+    /**
+     * Closing the app from the recents list ends playback and removes the notification. With the
+     * setting on, the finished downloads are also removed from the list (the next start repeats it
+     * in case the process is killed before this finishes).
+     */
     override fun onTaskRemoved(rootIntent: Intent?) {
+        if (ClientPrefs.clearDownloadsOnClose(this)) DownloadHub.clearFinished()
         if (TerminalHub.playing.value) TerminalHub.control("stop")
         session?.player?.run {
             pause()

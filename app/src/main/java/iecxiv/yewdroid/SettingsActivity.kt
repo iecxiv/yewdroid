@@ -17,6 +17,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
@@ -29,6 +30,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -201,6 +204,8 @@ private fun SettingsScreen(resumes: Int, onBack: () -> Unit) {
     var selectedLanguage by remember { mutableStateOf<String?>(null) }
     val language = selectedLanguage ?: savedLanguage
     var appLanguage by remember { mutableStateOf(AppLanguage.saved(ctx)) }
+    var startTab by remember { mutableStateOf(ClientPrefs.startTab(ctx)) }
+    var clearDownloads by remember { mutableStateOf(ClientPrefs.clearDownloadsOnClose(ctx)) }
     val sessionStarted by TerminalHub.sessionStarted.collectAsState()
     val translationAvailable by TerminalHub.translationAvailable.collectAsState()
     var cookiesSaved by remember { mutableStateOf(cookiesFile(ctx).isFile) }
@@ -279,6 +284,61 @@ private fun SettingsScreen(resumes: Int, onBack: () -> Unit) {
                 }
                 if (appLanguage == AppLanguage.SYSTEM && !AppLanguage.systemSupported()) {
                     Text(stringResource(R.string.applang_unsupported), style = note)
+                }
+            }
+
+            SettingsSection(stringResource(R.string.starttab_section)) {
+                Text(stringResource(R.string.starttab_desc), style = note)
+                ClientPrefs.START_TABS.forEach { (value, label) ->
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .selectable(
+                                selected = startTab == value,
+                                role = Role.RadioButton,
+                                onClick = {
+                                    startTab = value
+                                    ClientPrefs.saveStartTab(ctx, value)
+                                }
+                            )
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = startTab == value,
+                            onClick = null,
+                            colors = RadioButtonDefaults.colors(selectedColor = ACCENT, unselectedColor = FG)
+                        )
+                        Text(stringResource(label), style = body, modifier = Modifier.padding(start = 12.dp))
+                    }
+                }
+            }
+
+            SettingsSection(stringResource(R.string.dlclear_section)) {
+                Row(
+                    Modifier.fillMaxWidth()
+                        .clickable {
+                            clearDownloads = !clearDownloads
+                            ClientPrefs.saveClearDownloadsOnClose(ctx, clearDownloads)
+                        }
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.dlclear_title), style = body)
+                        Text(stringResource(R.string.dlclear_desc), style = note)
+                    }
+                    Switch(
+                        checked = clearDownloads,
+                        onCheckedChange = null,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = BG,
+                            checkedTrackColor = ACCENT,
+                            checkedBorderColor = ACCENT,
+                            uncheckedThumbColor = FG,
+                            uncheckedTrackColor = Color(0xFF2A2A2A),
+                            uncheckedBorderColor = Color(0xFF555555)
+                        )
+                    )
                 }
             }
 

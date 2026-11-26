@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="starttab_section">Start tab</string>
+    <string name="starttab_desc">Tab shown when the app opens.</string>
+    <string name="dlclear_section">Download list</string>
+    <string name="dlclear_title">Clear the list when closing the app</string>
+    <string name="dlclear_desc">Removes the finished downloads from the list when the app is closed. The saved files are not deleted.</string>
+</resources>

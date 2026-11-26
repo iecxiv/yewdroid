@@ -23,11 +23,18 @@ object DownloadHub {
 
     private fun module() = Python.getInstance().getModule("android_downloads")
 
-    /** Loads the saved download list (called once at startup, after Python has started). */
+    /**
+     * Loads the saved download list (called once at startup, after Python has started). When the
+     * setting to clear the list on closing is on, the finished downloads left from the last run
+     * (including interrupted ones) are removed right away.
+     */
     fun restore() {
-        val dir = appContext?.filesDir ?: return
+        val context = appContext ?: return
         scope.launch {
-            runCatching { module().callAttr("configure", File(dir, "downloads.json").absolutePath) }
+            runCatching { module().callAttr("configure", File(context.filesDir, "downloads.json").absolutePath) }
+            if (ClientPrefs.clearDownloadsOnClose(context)) {
+                runCatching { module().callAttr("clear_finished") }
+            }
         }
     }
 
