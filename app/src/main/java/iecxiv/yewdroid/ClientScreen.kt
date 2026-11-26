@@ -86,6 +86,7 @@ private enum class Section(val label: Int) {
 /**
  * What the client knew when its screen was last closed. The screen is rebuilt when switching to the terminal
  * and back, but the yewtube session (and the list it holds) lives on, so the screen must pick up from here.
+ * The logic lives here, outside the composable, to keep that function small.
  */
 private object ClientMemory {
     var section: Section? = null
@@ -95,6 +96,52 @@ private object ClientMemory {
     var lastQuery = ""
     var searchKept = false
     var startupDone = false
+
+    /** The tab to show: the one that was open, or else the one chosen in Settings. */
+    fun initialSection(ctx: Context): Section {
+        val remembered = section
+        if (remembered != null) return remembered
+        return when (UiPrefs.defaultTab(ctx)) {
+            UiPrefs.TAB_PLAYLISTS -> Section.PLAYLISTS
+            UiPrefs.TAB_HISTORY -> Section.HISTORY
+            else -> Section.SEARCH
+        }
+    }
+
+    /**
+     * Commands typed in the terminal change the list yewtube holds without the client knowing: if any were
+     * typed, what was remembered about that list is dropped. Returns whether any were typed.
+     */
+    fun takeTerminalTouch(): Boolean {
+        val touched = TerminalHub.takeTerminalTouched()
+        if (touched) {
+            resultsFrom = Section.SEARCH
+            searchKept = false
+            openedPlaylist = null
+        }
+        return touched
+    }
+
+    /** Keeps the screen's state; the tab and typed text only if the app is not closing. */
+    fun save(
+        finishing: Boolean, currentSection: Section, currentQuery: String, currentPlaylist: String?,
+        from: Section, last: String, kept: Boolean, started: Boolean
+    ) {
+        resultsFrom = from
+        lastQuery = last
+        searchKept = kept
+        if (finishing) {
+            section = null
+            query = ""
+            openedPlaylist = null
+            startupDone = false
+        } else {
+            section = currentSection
+            query = currentQuery
+            openedPlaylist = currentPlaylist
+            startupDone = started
+        }
+    }
 }
 
 private fun Context.activityFinishing(): Boolean {
@@ -159,29 +206,11 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     val downloads by DownloadHub.downloads.collectAsState()
     val formats by DownloadHub.formats.collectAsState()
     val activeDownloads = downloads.items.count { it.active }
-    // Commands typed in the terminal change the list yewtube holds without the client knowing: if any were
-    // typed, what the client remembered about that list is dropped before the screen state is built.
-    val terminalTouched = remember {
-        val touched = TerminalHub.takeTerminalTouched()
-        if (touched) {
-            ClientMemory.resultsFrom = Section.SEARCH
-            ClientMemory.searchKept = false
-            ClientMemory.openedPlaylist = null
-        }
-        touched
-    }
+    val terminalTouched = remember { ClientMemory.takeTerminalTouch() }
     var query by rememberSaveable { mutableStateOf(ClientMemory.query) }
-    // The tab chosen in Settings (search, playlists or history) is the one shown when the client opens;
-    // coming back from the terminal it is the tab that was open.
-    var section by rememberSaveable {
-        mutableStateOf(
-            ClientMemory.section ?: when (UiPrefs.defaultTab(ctx)) {
-                UiPrefs.TAB_PLAYLISTS -> Section.PLAYLISTS
-                UiPrefs.TAB_HISTORY -> Section.HISTORY
-                else -> Section.SEARCH
-            }
-        )
-    }
+    // The tab chosen in Settings is the one shown when the client opens; coming back from the terminal it is
+    // the tab that was open.
+    var section by rememberSaveable { mutableStateOf(ClientMemory.initialSection(ctx)) }
     // Which tab produced the results yewtube currently holds (history and playlists replace the search results).
     var resultsFrom by rememberSaveable { mutableStateOf(ClientMemory.resultsFrom) }
     // The history of a startup tab set to History is loaded once the session is ready.
@@ -201,7 +230,6 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     var adding by remember { mutableStateOf<Int?>(null) }
     var clearingHistory by remember { mutableStateOf(false) }
     var order by remember { mutableStateOf<ConfigOption?>(null) }
-    var orderMenu by remember { mutableStateOf(false) }
     val autoQueueFlow = remember(ctx.applicationContext) { TerminalPreferences.clientAutoQueue(ctx.applicationContext) }
     val savedAutoQueue by autoQueueFlow.collectAsState(initial = null)
     var selectedAutoQueue by remember { mutableStateOf<Boolean?>(null) }
@@ -222,21 +250,10 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     // Playback runs in its own thread in every view, so nothing has to be switched here.
     DisposableEffect(Unit) {
         onDispose {
-            // The list yewtube holds outlives this screen; the tab and typed text only if the app is not closing.
-            ClientMemory.resultsFrom = resultsFrom
-            ClientMemory.lastQuery = lastQuery
-            ClientMemory.searchKept = searchKept
-            if (ctx.activityFinishing()) {
-                ClientMemory.section = null
-                ClientMemory.query = ""
-                ClientMemory.openedPlaylist = null
-                ClientMemory.startupDone = false
-            } else {
-                ClientMemory.section = section
-                ClientMemory.query = query
-                ClientMemory.openedPlaylist = openedPlaylist
-                ClientMemory.startupDone = startupDone
-            }
+            ClientMemory.save(
+                ctx.activityFinishing(), section, query, openedPlaylist,
+                resultsFrom, lastQuery, searchKept, startupDone
+            )
         }
     }
     LaunchedEffect(Unit) {
@@ -276,21 +293,13 @@ fun ClientScreen(modifier: Modifier = Modifier) {
         }
     }
 
-    // A startup tab set to History needs its list loaded; Playlists and Search need nothing.
+    // A startup tab set to History needs its list loaded; back from the terminal on History the list yewtube
+    // holds may be a terminal search, so the history is loaded again (that list is kept aside as the Search
+    // results). Playlists and Search need nothing.
     LaunchedEffect(state.ready) {
-        if (state.ready && !startupDone) {
-            startupDone = true
-            if (section == Section.HISTORY && resultsFrom != Section.HISTORY) {
-                replaceResults(Section.HISTORY, "history")
-            }
-        }
-    }
-
-    // Back from the terminal on the History tab: the list yewtube holds may be a terminal search, so the
-    // history is loaded again (the terminal's list is kept aside as the Search results).
-    LaunchedEffect(state.ready) {
-        if (state.ready && terminalTouched && !touchedHandled) {
+        if (state.ready && !touchedHandled) {
             touchedHandled = true
+            startupDone = true
             if (section == Section.HISTORY && resultsFrom != Section.HISTORY) {
                 replaceResults(Section.HISTORY, "history")
             }
@@ -340,28 +349,13 @@ fun ClientScreen(modifier: Modifier = Modifier) {
         section = target
     }
 
-    val searchStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp, color = Color.White)
     val small = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = MUTED)
     Column(modifier) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-            Section.values().forEach { tab ->
-                val label = if (tab == Section.DOWNLOADS && activeDownloads > 0) {
-                    stringResource(R.string.dl_tab_active, activeDownloads)
-                } else {
-                    stringResource(tab.label)
-                }
-                Text(
-                    label,
-                    style = small.copy(
-                        color = if (section == tab) ACCENT else MUTED,
-                        textAlign = TextAlign.Center
-                    ),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f).clickable { select(tab) }.padding(vertical = 10.dp)
-                )
-            }
-        }
+        TabBar(
+            current = section,
+            activeDownloads = activeDownloads,
+            onSelect = { target -> select(target) }
+        )
         Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF2A2A2A)))
         if (section == Section.PLAYLISTS && openedPlaylist == null) {
             PlaylistsScreen(
@@ -375,126 +369,33 @@ fun ClientScreen(modifier: Modifier = Modifier) {
             DownloadsScreen(Modifier.weight(1f).fillMaxWidth())
         } else {
             if (section == Section.SEARCH) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    BasicTextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        modifier = Modifier.weight(1f).padding(vertical = 4.dp)
-                            .onFocusChanged { focused = it.hasFocus }
-                            .border(1.dp, ACCENT, RoundedCornerShape(6.dp))
-                            .padding(start = 10.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
-                        singleLine = true,
-                        textStyle = searchStyle,
-                        cursorBrush = SolidColor(ACCENT),
-                        keyboardOptions = KeyboardOptions(
-                            capitalization = KeyboardCapitalization.None,
-                            autoCorrectEnabled = false,
-                            imeAction = ImeAction.Search
-                        ),
-                        keyboardActions = KeyboardActions(onSearch = { search() }),
-                        decorationBox = { inner ->
-                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                Box(Modifier.weight(1f).padding(vertical = 6.dp)) {
-                                    if (query.isEmpty()) Text(stringResource(R.string.client_search_hint), style = small)
-                                    inner()
-                                }
-                                if (query.isNotEmpty()) {
-                                    IconButton(onClick = { query = "" }, modifier = Modifier.size(32.dp)) {
-                                        Icon(
-                                            Icons.Filled.Close,
-                                            contentDescription = stringResource(R.string.client_search_clear),
-                                            tint = MUTED,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    )
-                    IconButton(onClick = { search() }) {
-                        Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.client_search), tint = FG)
-                    }
-                }
-                order?.let { current ->
-                    Row(
-                        Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(stringResource(R.string.orderui_label), style = small)
-                        Box {
-                            Text(
-                                orderName(current.value) + " \u25BE",
-                                style = small.copy(color = ACCENT),
-                                modifier = Modifier.clickable { orderMenu = true }.padding(horizontal = 8.dp, vertical = 8.dp)
-                            )
-                            DropdownMenu(expanded = orderMenu, onDismissRequest = { orderMenu = false }) {
-                                current.options.forEach { value ->
-                                    DropdownMenuItem(
-                                        text = { Text(orderName(value)) },
-                                        onClick = {
-                                            orderMenu = false
-                                            if (value != current.value) pickOrder(value)
-                                        }
-                                    )
-                                }
-                            }
-                        }
+                SearchBox(
+                    query = query,
+                    onQuery = { text -> query = text },
+                    onFocus = { hasFocus -> focused = hasFocus },
+                    onSearch = { search() }
+                )
+                val currentOrder = order
+                if (currentOrder != null) {
+                    OrderRow(currentOrder) { value ->
+                        if (value != currentOrder.value) pickOrder(value)
                     }
                 }
             }
             if (section == Section.PLAYLISTS) {
-                Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { openedPlaylist = null }) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.pledit_back),
-                            tint = FG
-                        )
-                    }
-                    Text(
-                        openedPlaylist.orEmpty(),
-                        style = small.copy(color = ACCENT),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
+                OpenedPlaylistBar(openedPlaylist.orEmpty()) { openedPlaylist = null }
             }
             if (autoQueue != null) {
-                Row(
-                    Modifier.fillMaxWidth()
-                        .clickable {
-                            val value = !autoQueue
-                            selectedAutoQueue = value
-                            TerminalPreferences.saveClientAutoQueue(ctx, value)
-                        }
-                        .padding(start = 12.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Switch(
-                        checked = autoQueue,
-                        onCheckedChange = null,
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = BG,
-                            checkedTrackColor = ACCENT,
-                            checkedBorderColor = ACCENT,
-                            uncheckedThumbColor = FG,
-                            uncheckedTrackColor = Color(0xFF2A2A2A),
-                            uncheckedBorderColor = Color(0xFF555555)
-                        )
-                    )
-                    Text(
-                        stringResource(R.string.client_autoqueue),
-                        style = small.copy(color = FG),
-                        modifier = Modifier.padding(start = 10.dp).weight(1f)
-                    )
-                    if (section == Section.SEARCH && state.mode == "normal" && shownItems.isNotEmpty()) {
-                        TextButton(
-                            onClick = { saving = true },
-                            colors = ButtonDefaults.textButtonColors(contentColor = ACCENT)
-                        ) { Text(stringResource(R.string.client_save_playlist), fontSize = 12.sp) }
-                    }
-                }
+                AutoQueueRow(
+                    autoQueue = autoQueue,
+                    showSave = section == Section.SEARCH && state.mode == "normal" && shownItems.isNotEmpty(),
+                    onToggle = {
+                        val value = !autoQueue
+                        selectedAutoQueue = value
+                        TerminalPreferences.saveClientAutoQueue(ctx, value)
+                    },
+                    onSave = { saving = true }
+                )
             }
             if (section == Section.HISTORY) {
                 Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -555,55 +456,259 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                 }
             }
             if (!showHistory && shownPages > 1) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    val hasPrevious = state.page > 0
-                    val hasNext = state.page + 1 < state.pages
-                    IconButton(onClick = { TerminalHub.runCommand("p") }, enabled = hasPrevious) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                            contentDescription = stringResource(R.string.client_prev),
-                            tint = if (hasPrevious) FG else MUTED
-                        )
+                PageBar(state.page, shownPages)
+            }
+        }
+    }
+    ClientDialogs(
+        saving = saving,
+        onSavingChange = { saving = it },
+        adding = adding,
+        onAddingChange = { adding = it },
+        clearingHistory = clearingHistory,
+        onClearingHistoryChange = { clearingHistory = it },
+        inOpenedPlaylist = section == Section.PLAYLISTS,
+        openedPlaylist = openedPlaylist
+    )
+    formats?.let { picker ->
+        FormatsDialog(
+            state = picker,
+            onPick = { option -> DownloadHub.start(picker, option) },
+            onDismiss = { DownloadHub.dismissFormats() }
+        )
+    }
+}
+
+@Composable
+private fun TabBar(current: Section, activeDownloads: Int, onSelect: (Section) -> Unit) {
+    val small = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = MUTED)
+    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+        Section.values().forEach { tab ->
+            val label = if (tab == Section.DOWNLOADS && activeDownloads > 0) {
+                stringResource(R.string.dl_tab_active, activeDownloads)
+            } else {
+                stringResource(tab.label)
+            }
+            Text(
+                label,
+                style = small.copy(
+                    color = if (current == tab) ACCENT else MUTED,
+                    textAlign = TextAlign.Center
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f).clickable { onSelect(tab) }.padding(vertical = 10.dp)
+            )
+        }
+    }
+}
+
+/** The search text box with its clear (x) button and the search button. */
+@Composable
+private fun SearchBox(
+    query: String,
+    onQuery: (String) -> Unit,
+    onFocus: (Boolean) -> Unit,
+    onSearch: () -> Unit
+) {
+    val searchStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp, color = Color.White)
+    val small = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = MUTED)
+    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        BasicTextField(
+            value = query,
+            onValueChange = onQuery,
+            modifier = Modifier.weight(1f).padding(vertical = 4.dp)
+                .onFocusChanged { onFocus(it.hasFocus) }
+                .border(1.dp, ACCENT, RoundedCornerShape(6.dp))
+                .padding(start = 10.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+            singleLine = true,
+            textStyle = searchStyle,
+            cursorBrush = SolidColor(ACCENT),
+            keyboardOptions = KeyboardOptions(
+                capitalization = KeyboardCapitalization.None,
+                autoCorrectEnabled = false,
+                imeAction = ImeAction.Search
+            ),
+            keyboardActions = KeyboardActions(onSearch = { onSearch() }),
+            decorationBox = { inner ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f).padding(vertical = 6.dp)) {
+                        if (query.isEmpty()) Text(stringResource(R.string.client_search_hint), style = small)
+                        inner()
                     }
-                    Text(
-                        stringResource(R.string.client_page, state.page + 1, state.pages),
-                        style = small.copy(textAlign = TextAlign.Center),
-                        modifier = Modifier.weight(1f)
+                    if (query.isNotEmpty()) {
+                        IconButton(onClick = { onQuery("") }, modifier = Modifier.size(32.dp)) {
+                            Icon(
+                                Icons.Filled.Close,
+                                contentDescription = stringResource(R.string.client_search_clear),
+                                tint = MUTED,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        )
+        IconButton(onClick = onSearch) {
+            Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.client_search), tint = FG)
+        }
+    }
+}
+
+/** The "order by" picker under the search box. */
+@Composable
+private fun OrderRow(current: ConfigOption, onPick: (String) -> Unit) {
+    val small = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = MUTED)
+    var menu by remember { mutableStateOf(false) }
+    Row(
+        Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(stringResource(R.string.orderui_label), style = small)
+        Box {
+            Text(
+                orderName(current.value) + " \u25BE",
+                style = small.copy(color = ACCENT),
+                modifier = Modifier.clickable { menu = true }.padding(horizontal = 8.dp, vertical = 8.dp)
+            )
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                current.options.forEach { value ->
+                    DropdownMenuItem(
+                        text = { Text(orderName(value)) },
+                        onClick = {
+                            menu = false
+                            onPick(value)
+                        }
                     )
-                    IconButton(onClick = { TerminalHub.runCommand("n") }, enabled = hasNext) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = stringResource(R.string.client_next),
-                            tint = if (hasNext) FG else MUTED
-                        )
-                    }
                 }
             }
         }
     }
+}
+
+/** Back arrow and name of the playlist opened inside the Playlists tab. */
+@Composable
+private fun OpenedPlaylistBar(name: String, onBack: () -> Unit) {
+    val small = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = MUTED)
+    Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = onBack) {
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = stringResource(R.string.pledit_back),
+                tint = FG
+            )
+        }
+        Text(
+            name,
+            style = small.copy(color = ACCENT),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+/** The auto-queue switch, with the "save as playlist" button when there are results to save. */
+@Composable
+private fun AutoQueueRow(autoQueue: Boolean, showSave: Boolean, onToggle: () -> Unit, onSave: () -> Unit) {
+    val small = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = MUTED)
+    Row(
+        Modifier.fillMaxWidth()
+            .clickable(onClick = onToggle)
+            .padding(start = 12.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Switch(
+            checked = autoQueue,
+            onCheckedChange = null,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = BG,
+                checkedTrackColor = ACCENT,
+                checkedBorderColor = ACCENT,
+                uncheckedThumbColor = FG,
+                uncheckedTrackColor = Color(0xFF2A2A2A),
+                uncheckedBorderColor = Color(0xFF555555)
+            )
+        )
+        Text(
+            stringResource(R.string.client_autoqueue),
+            style = small.copy(color = FG),
+            modifier = Modifier.padding(start = 10.dp).weight(1f)
+        )
+        if (showSave) {
+            TextButton(
+                onClick = onSave,
+                colors = ButtonDefaults.textButtonColors(contentColor = ACCENT)
+            ) { Text(stringResource(R.string.client_save_playlist), fontSize = 12.sp) }
+        }
+    }
+}
+
+/** Previous and next page buttons with the page counter. */
+@Composable
+private fun PageBar(page: Int, pages: Int) {
+    val small = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = MUTED)
+    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        val hasPrevious = page > 0
+        val hasNext = page + 1 < pages
+        IconButton(onClick = { TerminalHub.runCommand("p") }, enabled = hasPrevious) {
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                contentDescription = stringResource(R.string.client_prev),
+                tint = if (hasPrevious) FG else MUTED
+            )
+        }
+        Text(
+            stringResource(R.string.client_page, page + 1, pages),
+            style = small.copy(textAlign = TextAlign.Center),
+            modifier = Modifier.weight(1f)
+        )
+        IconButton(onClick = { TerminalHub.runCommand("n") }, enabled = hasNext) {
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = stringResource(R.string.client_next),
+                tint = if (hasNext) FG else MUTED
+            )
+        }
+    }
+}
+
+/** The save-playlist, add-to-playlist and clear-history dialogs of the client. */
+@Composable
+private fun ClientDialogs(
+    saving: Boolean,
+    onSavingChange: (Boolean) -> Unit,
+    adding: Int?,
+    onAddingChange: (Int?) -> Unit,
+    clearingHistory: Boolean,
+    onClearingHistoryChange: (Boolean) -> Unit,
+    inOpenedPlaylist: Boolean,
+    openedPlaylist: String?
+) {
     if (saving) {
         NameDialog(
             title = stringResource(R.string.playlist_save_title),
             confirmLabel = stringResource(R.string.playlist_save_confirm),
             onConfirm = { name ->
                 TerminalHub.runCommand("save $name")
-                saving = false
+                onSavingChange(false)
             },
-            onDismiss = { saving = false }
+            onDismiss = { onSavingChange(false) }
         )
     }
-    adding?.let { number ->
+    if (adding != null) {
+        val number: Int = adding
         AddToPlaylistDialog(
             onPick = { name ->
-                if (section == Section.PLAYLISTS && name == openedPlaylist) {
+                if (inOpenedPlaylist && name == openedPlaylist) {
                     // Adding to the playlist being shown: reload it so the new entry appears.
                     TerminalHub.runCommands("pladd $name $number", "plreload $name")
                 } else {
                     TerminalHub.runCommand("pladd $name $number")
                 }
-                adding = null
+                onAddingChange(null)
             },
-            onDismiss = { adding = null }
+            onDismiss = { onAddingChange(null) }
         )
     }
     if (clearingHistory) {
@@ -613,16 +718,9 @@ fun ClientScreen(modifier: Modifier = Modifier) {
             onConfirm = {
                 // "history clear" leaves the list on screen; showing the history again refreshes it at once.
                 TerminalHub.runCommands("history clear", "history")
-                clearingHistory = false
+                onClearingHistoryChange(false)
             },
-            onDismiss = { clearingHistory = false }
-        )
-    }
-    formats?.let { picker ->
-        FormatsDialog(
-            state = picker,
-            onPick = { option -> DownloadHub.start(picker, option) },
-            onDismiss = { DownloadHub.dismissFormats() }
+            onDismiss = { onClearingHistoryChange(false) }
         )
     }
 }
