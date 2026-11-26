@@ -306,7 +306,7 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                         modifier = Modifier.weight(1f).padding(vertical = 4.dp)
                             .onFocusChanged { focused = it.hasFocus }
                             .border(1.dp, ACCENT, RoundedCornerShape(6.dp))
-                            .padding(start = 10.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+                            .padding(start = 10.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
                         singleLine = true,
                         textStyle = searchStyle,
                         cursorBrush = SolidColor(ACCENT),
@@ -318,19 +318,19 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                         keyboardActions = KeyboardActions(onSearch = { search() }),
                         decorationBox = { inner ->
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                Box(Modifier.weight(1f)) {
+                                Box(Modifier.weight(1f).padding(vertical = 6.dp)) {
                                     if (query.isEmpty()) Text(stringResource(R.string.client_search_hint), style = small)
                                     inner()
                                 }
                                 if (query.isNotEmpty()) {
-                                    // The x empties the box; the keyboard and focus stay where they are.
-                                    Icon(
-                                        Icons.Filled.Close,
-                                        contentDescription = stringResource(R.string.client_history_clear),
-                                        tint = MUTED,
-                                        modifier = Modifier.padding(start = 6.dp).size(32.dp)
-                                            .clickable { query = "" }.padding(6.dp)
-                                    )
+                                    IconButton(onClick = { query = "" }, modifier = Modifier.size(32.dp)) {
+                                        Icon(
+                                            Icons.Filled.Close,
+                                            contentDescription = stringResource(R.string.client_search_clear),
+                                            tint = MUTED,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
