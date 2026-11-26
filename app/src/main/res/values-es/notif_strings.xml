@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="dlnotif_channel">Descargas</string>
+    <string name="dlnotif_preparing">Preparando descarga…</string>
+    <string name="dlnotif_waiting">+%1$d en espera</string>
+</resources>

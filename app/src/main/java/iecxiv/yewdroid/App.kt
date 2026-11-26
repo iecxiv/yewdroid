@@ -7,6 +7,7 @@ import com.chaquo.python.android.AndroidPlatform
 class App : Application() {
     override fun onCreate() {
         super.onCreate()
+        DownloadHub.appContext = applicationContext
         if (!Python.isStarted()) Python.start(AndroidPlatform(this))
     }
 }

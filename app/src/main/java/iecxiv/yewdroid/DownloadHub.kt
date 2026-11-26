@@ -1,5 +1,6 @@
 package iecxiv.yewdroid
 
+import android.content.Context
 import com.chaquo.python.Python
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -15,6 +16,9 @@ object DownloadHub {
     val downloads: StateFlow<DownloadsState> = _downloads
     private val _formats = MutableStateFlow<FormatsState?>(null)
     val formats: StateFlow<FormatsState?> = _formats
+
+    /** Application context (set in App.onCreate); used to start [DownloadService]. */
+    @Volatile var appContext: Context? = null
 
     private fun module() = Python.getInstance().getModule("android_downloads")
 
@@ -43,6 +47,8 @@ object DownloadHub {
 
     fun start(state: FormatsState, option: FormatOption) {
         _formats.value = null
+        // Keeps the process alive and shows the progress notification while the queue works.
+        appContext?.let { DownloadService.start(it) }
         scope.launch {
             runCatching {
                 module().callAttr("enqueue", state.ytid, state.title, state.kind, option.id, option.label)
