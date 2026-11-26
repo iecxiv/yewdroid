@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -119,7 +120,7 @@ fun FormatsDialog(state: FormatsState, onPick: (FormatOption) -> Unit, onDismiss
     )
 }
 
-/** The Downloads tab: one row per download with progress, status and a cancel button. */
+/** The Downloads tab: one row per download with progress, status and a cancel or remove button. */
 @Composable
 fun DownloadsScreen(modifier: Modifier = Modifier) {
     val state by DownloadHub.downloads.collectAsState()
@@ -165,7 +166,8 @@ private fun DownloadRow(item: DownloadItem) {
                      else "$stage \u00b7 %d%%".format(item.percent.toInt())
         "done" -> stringResource(R.string.dl_state_done, item.path)
         "cancelled" -> stringResource(R.string.dl_state_cancelled)
-        else -> stringResource(R.string.dl_state_error, item.error)
+        else -> if (item.error == "interrupted") stringResource(R.string.dl_state_interrupted)
+                else stringResource(R.string.dl_state_error, item.error)
     }
     Row(
         Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
@@ -196,6 +198,10 @@ private fun DownloadRow(item: DownloadItem) {
         if (item.active) {
             IconButton(onClick = { DownloadHub.cancel(item.id) }) {
                 Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.dl_cancel_download), tint = FG)
+            }
+        } else {
+            IconButton(onClick = { DownloadHub.remove(item.id) }) {
+                Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.dl_remove), tint = FG)
             }
         }
     }

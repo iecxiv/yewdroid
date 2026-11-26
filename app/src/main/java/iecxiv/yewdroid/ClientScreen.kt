@@ -102,6 +102,11 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     val activeDownloads = downloads.items.count { it.active }
     var query by rememberSaveable { mutableStateOf("") }
     var section by rememberSaveable { mutableStateOf(Section.SEARCH) }
+    // Which tab produced the results yewtube currently holds (history replaces the search results).
+    var resultsFrom by rememberSaveable { mutableStateOf(Section.SEARCH) }
+    var lastQuery by rememberSaveable { mutableStateOf("") }
+    // Result list being replaced by a new command: hidden until the new results arrive.
+    var staleItems by remember { mutableStateOf<List<ClientItem>?>(null) }
     var focused by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     var adding by remember { mutableStateOf<Int?>(null) }
@@ -118,6 +123,11 @@ fun ClientScreen(modifier: Modifier = Modifier) {
         else searches.filter { it.contains(typed, ignoreCase = true) && !it.equals(typed, ignoreCase = true) }
     }
     val showHistory = section == Section.SEARCH && focused && suggestions.isNotEmpty()
+    val hideResults = section == Section.SEARCH &&
+        (resultsFrom == Section.HISTORY || (staleItems != null && state.items === staleItems))
+    val shownItems = if (hideResults) emptyList() else state.items
+    val shownMessage = if (hideResults) "" else state.message
+    val shownPages = if (hideResults) 0 else state.pages
     // While the native client is shown, playback runs in the background so commands keep working.
     DisposableEffect(Unit) {
         TerminalHub.setBackgroundPlayback(true)
@@ -131,6 +141,9 @@ fun ClientScreen(modifier: Modifier = Modifier) {
         val text = query.trim().trimStart('.', '/').trim()
         if (text.isNotEmpty()) {
             focus.clearFocus()
+            if (resultsFrom == Section.HISTORY) staleItems = state.items
+            resultsFrom = Section.SEARCH
+            lastQuery = text
             TerminalPreferences.addSearch(ctx, text)
             TerminalHub.runCommand("/$text")
         }
@@ -139,7 +152,15 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     fun select(target: Section) {
         focus.clearFocus()
         focused = false
-        if (target == Section.HISTORY && section != Section.HISTORY) TerminalHub.runCommand("history")
+        if (target == Section.HISTORY && section != Section.HISTORY) {
+            TerminalHub.runCommand("history")
+            resultsFrom = Section.HISTORY
+        } else if (target == Section.SEARCH && resultsFrom == Section.HISTORY && lastQuery.isNotEmpty()) {
+            // Back from the history: yewtube still holds it, so repeat the last search.
+            staleItems = state.items
+            resultsFrom = Section.SEARCH
+            TerminalHub.runCommand("/$lastQuery")
+        }
         section = target
     }
 
@@ -168,7 +189,11 @@ fun ClientScreen(modifier: Modifier = Modifier) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF2A2A2A)))
         if (section == Section.PLAYLISTS) {
             PlaylistsScreen(
-                onOpened = { section = Section.SEARCH },
+                onOpened = {
+                    if (resultsFrom == Section.HISTORY) staleItems = state.items
+                    resultsFrom = Section.SEARCH
+                    section = Section.SEARCH
+                },
                 modifier = Modifier.weight(1f).fillMaxWidth()
             )
         } else if (section == Section.DOWNLOADS) {
@@ -232,7 +257,7 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                         style = small.copy(color = FG),
                         modifier = Modifier.padding(start = 10.dp).weight(1f)
                     )
-                    if (section == Section.SEARCH && state.mode == "normal" && state.items.isNotEmpty()) {
+                    if (section == Section.SEARCH && state.mode == "normal" && shownItems.isNotEmpty()) {
                         TextButton(
                             onClick = { saving = true },
                             colors = ButtonDefaults.textButtonColors(contentColor = ACCENT)
@@ -252,8 +277,8 @@ fun ClientScreen(modifier: Modifier = Modifier) {
             if (state.busy || !state.ready) {
                 LinearProgressIndicator(Modifier.fillMaxWidth(), color = ACCENT, trackColor = Color(0xFF2A2A2A))
             }
-            if (state.message.isNotEmpty()) {
-                Text(state.message, style = small.copy(color = ACCENT), modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+            if (shownMessage.isNotEmpty()) {
+                Text(shownMessage, style = small.copy(color = ACCENT), modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
             }
             if (showHistory) {
                 SearchHistoryPanel(
@@ -266,7 +291,7 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                     onClear = { TerminalPreferences.clearSearches(ctx) },
                     modifier = Modifier.weight(1f).fillMaxWidth()
                 )
-            } else if (state.ready && state.items.isEmpty()) {
+            } else if (state.ready && shownItems.isEmpty()) {
                 Box(Modifier.weight(1f).fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
                     Text(
                         stringResource(if (section == Section.HISTORY) R.string.history_empty else R.string.client_empty),
@@ -275,7 +300,7 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                 }
             } else {
                 LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
-                    items(state.items, key = { "${it.n}-${it.id}" }) { item ->
+                    items(shownItems, key = { "${it.n}-${it.id}" }) { item ->
                         ResultRow(
                             item,
                             playlist = state.mode == "ytpl",
@@ -286,7 +311,7 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                     }
                 }
             }
-            if (!showHistory && state.pages > 1) {
+            if (!showHistory && shownPages > 1) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     val hasPrevious = state.page > 0
                     val hasNext = state.page + 1 < state.pages
