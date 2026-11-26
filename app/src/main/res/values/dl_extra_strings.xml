@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="dl_state_interrupted">Interrupted when the app closed</string>
+    <string name="dl_remove">Remove from list</string>
+</resources>

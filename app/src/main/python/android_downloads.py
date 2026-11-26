@@ -1,5 +1,6 @@
 """Download queue for the native client: lists formats, runs one worker thread, reports progress."""
 import json
+import os
 import queue
 import re
 import sys
@@ -14,8 +15,10 @@ _lock = threading.RLock()
 _jobs = []
 _trackers = {}
 _pending = queue.Queue()
-_state = {"worker": None, "next": 0, "pushed": 0.0}
+_state = {"worker": None, "next": 0, "pushed": 0.0, "file": None}
 _FINISHED = ("done", "error", "cancelled")
+_KEYS = ("id", "ytid", "title", "kind", "format_id", "label", "state", "percent", "stage", "path",
+         "error")
 _WEIGHTS = {
     "audio": {"download": (0.0, 0.95), "export": (0.95, 1.0)},
     "video": {"video": (0.0, 0.75), "audio": (0.75, 0.95), "merge": (0.95, 0.98),
@@ -128,11 +131,57 @@ def snapshot():
     return json.dumps({"items": items}, ensure_ascii=False)
 
 
+def _save():
+    """Writes the list to disk so it survives closing the app (only called on state changes)."""
+    path = _state.get("file")
+    if not path:
+        return
+    with _lock:
+        text = json.dumps({"next": _state["next"], "jobs": _jobs}, ensure_ascii=False)
+    try:
+        temporary = path + ".tmp"
+        with open(temporary, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        os.replace(temporary, path)
+    except Exception:
+        _log()
+
+
+def configure(path):
+    """Sets the file that keeps the list and loads it; unfinished downloads become interrupted."""
+    path = str(path)
+    if _state.get("file") == path:
+        return True
+    loaded, top = [], 0
+    try:
+        with open(path, encoding="utf-8") as handle:
+            data = json.load(handle)
+        top = int(data.get("next", 0))
+        for job in data.get("jobs", []):
+            if not isinstance(job, dict) or not all(key in job for key in _KEYS):
+                continue
+            if job["state"] not in _FINISHED:
+                job.update(state="error", stage="", error="interrupted")
+            loaded.append(job)
+    except FileNotFoundError:
+        pass
+    except Exception:
+        _log()
+    with _lock:
+        _state["file"] = path
+        _jobs[:0] = loaded
+        _state["next"] = max([_state["next"], top] + [int(job["id"]) for job in loaded])
+    _push(True)
+    return True
+
+
 def _push(force=False):
     now = time.monotonic()
     if not force and now - _state["pushed"] < 0.25:
         return
     _state["pushed"] = now
+    if force:
+        _save()
     try:
         from java import jclass
         jclass("iecxiv.yewdroid.DownloadHub").update(snapshot())
@@ -242,6 +291,15 @@ def cancel(job_id):
             if tracker is not None:
                 tracker.cancelled = True
             job["stage"] = "cancelling"
+    _push(True)
+    return True
+
+
+def remove(job_id):
+    """Removes one finished download from the list (the saved file is not touched)."""
+    job_id = int(job_id)
+    with _lock:
+        _jobs[:] = [job for job in _jobs if not (job["id"] == job_id and job["state"] in _FINISHED)]
     _push(True)
     return True
 

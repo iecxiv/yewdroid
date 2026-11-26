@@ -66,8 +66,15 @@ class PlaybackService : MediaSessionService() {
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = session
 
+    /** Closing the app from the recents list ends playback and removes the notification. */
     override fun onTaskRemoved(rootIntent: Intent?) {
-        if (!TerminalHub.playing.value) stopSelf()
+        if (TerminalHub.playing.value) TerminalHub.control("stop")
+        session?.player?.run {
+            pause()
+            stop()
+            clearMediaItems()
+        }
+        stopSelf()
     }
 
     override fun onDestroy() {

@@ -8,6 +8,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import java.io.File
 
 /** Download queue state for the native client; the work itself runs in Python (android_downloads). */
 object DownloadHub {
@@ -21,6 +22,14 @@ object DownloadHub {
     @Volatile var appContext: Context? = null
 
     private fun module() = Python.getInstance().getModule("android_downloads")
+
+    /** Loads the saved download list (called once at startup, after Python has started). */
+    fun restore() {
+        val dir = appContext?.filesDir ?: return
+        scope.launch {
+            runCatching { module().callAttr("configure", File(dir, "downloads.json").absolutePath) }
+        }
+    }
 
     /** Called from Python with the JSON of android_downloads.snapshot(). */
     @JvmStatic
@@ -58,6 +67,11 @@ object DownloadHub {
 
     fun cancel(id: Int) {
         scope.launch { runCatching { module().callAttr("cancel", id) } }
+    }
+
+    /** Removes one finished download from the list; the saved file stays. */
+    fun remove(id: Int) {
+        scope.launch { runCatching { module().callAttr("remove", id) } }
     }
 
     fun clearFinished() {

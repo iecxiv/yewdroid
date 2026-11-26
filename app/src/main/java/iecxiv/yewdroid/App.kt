@@ -9,5 +9,6 @@ class App : Application() {
         super.onCreate()
         DownloadHub.appContext = applicationContext
         if (!Python.isStarted()) Python.start(AndroidPlatform(this))
+        DownloadHub.restore()
     }
 }
