@@ -10,16 +10,21 @@ YewDroid es una adaptación de yewtube, descendiente de mps-youtube, con interfa
 
 Modified version of yewtube, adapted and simplified for native Android use.
 
+Versión de la app (`versionName`): 1.0.1.
+
 ### Características
 
-- Cliente nativo con pestañas Buscar, Listas, Historial y Descargas, además de la terminal Compose con colores ANSI y entrada de comandos.
+- Cliente nativo con pestañas Buscar, Listas, Historial y Descargas, además de la terminal Compose con colores ANSI y entrada de comandos. Una etiqueta de la cabecera cambia entre el modo Terminal y el modo UI.
+- Buscar: selector de orden (Relevancia, Fecha, Vistas, Título), que usa el mismo ajuste `order` de yewtube y repite la búsqueda al cambiarlo, y una x dentro del cuadro de texto para vaciarlo.
 - Los resultados de Buscar se conservan en memoria al pasar a Historial o a una lista: al volver no se repite la búsqueda. Si esa copia se pierde (por ejemplo, tras reiniciarse el proceso), se repite la última búsqueda.
+- Historial: una pista se guarda cuando empieza a sonar, no al ponerla en cola ni al terminar. Vaciar el historial actualiza la pestaña al momento.
 - Listas locales: al abrir una, se muestra dentro de la pestaña Listas, sin cuadro de búsqueda y con flecha para volver. Se pueden quitar elementos de la lista abierta y añadir resultados a una lista existente o nueva; los cambios se guardan al momento.
 - Reproducción mediante un servicio multimedia con controles en la notificación y la pantalla de bloqueo. Pasar la app a segundo plano no la detiene; cerrarla desde la lista de recientes detiene la reproducción y quita la notificación.
+- Reproductor en modo UI: los controles de reproducción van bajo el vídeo; en pantalla completa se colocan encima de la barra de tiempo. Al girar el dispositivo a horizontal con un vídeo, entra en pantalla completa, y al volver a vertical sale.
 - Descargas de audio y de vídeo con selector de calidad (yt-dlp), cola y pestaña Descargas. Un servicio en primer plano muestra el progreso con botón de cancelar y avisa al terminar. Los archivos se guardan en `Descargas/YewDroid`.
-- La lista de descargas se conserva al cerrar la app (`downloads.json` en el almacenamiento privado) hasta que se quita a mano, con «Quitar terminadas» o con el botón de cada fila. Quitar una fila no borra el archivo guardado. Una descarga en curso al cerrar la app queda como «Interrumpida».
+- La lista de descargas se conserva al cerrar la app (`downloads.json` en el almacenamiento privado) hasta que se quita a mano, con «Quitar terminadas» o con el botón de cada fila. Quitar una fila no borra el archivo guardado. Una descarga en curso al cerrar la app queda como «Interrumpida». Con el interruptor «Borrar la lista de descargas al cerrar» de Ajustes, la lista se vacía en su lugar: al salir de la pantalla principal con el botón atrás, o, si Android cierra el proceso, al volver a arrancar la app. Los archivos guardados no se borran.
 - Conversión de las descargas de audio con el preajuste de codificación elegido en Ajustes (por ejemplo mp3), mediante FFmpeg empaquetado en la app. Por defecto solo se guarda el archivo convertido; el interruptor «Conservar el audio original» guarda también el original. Ver [FFMPEG-INTEGRATION.md](FFMPEG-INTEGRATION.md).
-- Ajustes en la interfaz: idioma de la app (Sistema, English o Español; «Sistema» sigue el del dispositivo si está traducido y, si no, usa inglés), permisos, idioma de la terminal, opciones de yewtube (formatos de audio y vídeo, resolución máxima, orden, columnas, mostrar vídeo, repetir, historial), preajustes de codificación con su editor, y cookies de YouTube importables.
+- Ajustes en la interfaz, agrupados por secciones: idioma de la app (Sistema, English o Español; «Sistema» sigue el del dispositivo si está traducido y, si no, usa inglés), inicio (pestaña que se muestra al abrir la app: Buscar, Listas o Historial; y el borrado de la lista de descargas al cerrar), permisos, idioma de la terminal, opciones de yewtube (formatos de audio y vídeo, resolución máxima, orden, columnas, mostrar vídeo, repetir, historial), preajustes de codificación con su editor, y cookies de YouTube importables. La pestaña de inicio se aplica cada vez que se abre la pantalla del modo UI, también al volver desde la terminal.
 - Apertura de enlaces en aplicaciones Android y uso del selector de compartir.
 - Adaptadores Python que ajustan el comportamiento de yewtube en tiempo de ejecución; no es un reemplazo independiente de ese proyecto.
 - QuickJS-NG integrado para los desafíos JavaScript utilizados por yt-dlp.
@@ -91,6 +96,8 @@ Comprobado en un dispositivo: la compilación de FFmpeg y la conversión de audi
 
 Sin comprobar: el interruptor «Conservar el audio original» (posterior a esas pruebas), la exportación de audio en Android 8 y 9 (la corrección procede de leer el código, no de una prueba), los siete perfiles de codificación, la alineación de 16 KB de los binarios y la compatibilidad de licencias de una APK concreta. Las notificaciones de descarga, la persistencia de su lista, las opciones de Ajustes y el cierre desde recientes tampoco constan como confirmados.
 
+También sin comprobar, y sin compilar al redactar esto, los cambios posteriores a las pruebas anteriores: los controles bajo el vídeo, la pantalla completa y la rotación, el selector de orden y la x del cuadro de búsqueda, el registro del historial al empezar a sonar, la actualización de la pestaña al vaciar el historial, la pestaña de inicio y el borrado de la lista de descargas al cerrar.
+
 Limitaciones conocidas: la conversión solo cubre audio, su progreso es indeterminado y, si el preajuste no admite la extensión descargada, el cliente guarda el original sin avisar. Los avisos de áñadido y quitado de las listas dependen del catálogo de traducción de yewtube y pueden salir en inglés. En Android 8 y 9 las descargas no se exportan a la carpeta pública Descargas.
 
 ### Licencia
@@ -109,16 +116,21 @@ YewDroid adapts yewtube, a descendant of mps-youtube, with a native Android inte
 
 Modified version of yewtube, adapted and simplified for native Android use.
 
+App version (`versionName`): 1.0.1.
+
 ### Features
 
-- Native client with Search, Playlists, History and Downloads tabs, plus the Compose terminal with ANSI colors and command input.
+- Native client with Search, Playlists, History and Downloads tabs, plus the Compose terminal with ANSI colors and command input. A label in the header switches between Terminal mode and UI mode.
+- Search: an order picker (Relevance, Date, Views, Title) that uses yewtube's own `order` setting and repeats the search when changed, and an x inside the text box to empty it.
 - Search results are kept in memory when you switch to History or a playlist, so returning does not repeat the search. If that copy is lost (for example after the process restarts), the last search is repeated.
+- History: a track is recorded when it starts playing, not when it is queued or when it ends. Clearing the history refreshes the tab at once.
 - Local playlists: opening one shows it inside the Playlists tab, without the search box and with a back arrow. You can remove entries from the open playlist and add results to an existing or new playlist; changes are saved immediately.
 - Playback through a media service with notification and lock-screen controls. Moving the app to the background does not stop it; closing it from the recents list stops playback and removes the notification.
+- Player in UI mode: the playback controls sit below the video; in full screen they are placed above the time bar. Rotating the device to landscape with a video enters full screen, and rotating back to portrait leaves it.
 - Audio and video downloads with a quality picker (yt-dlp), a queue and a Downloads tab. A foreground service shows progress with a cancel button and announces the result. Files are saved to `Downloads/YewDroid`.
-- The download list survives closing the app (`downloads.json` in private storage) until removed manually, with "Clear finished" or each row's button. Removing a row does not delete the saved file. A download that was running when the app closed shows as "Interrupted".
+- The download list survives closing the app (`downloads.json` in private storage) until removed manually, with "Clear finished" or each row's button. Removing a row does not delete the saved file. A download that was running when the app closed shows as "Interrupted". With the Settings switch "Clear the downloads list on close", the list is emptied instead: when leaving the main screen with the back button or, if Android ends the process, the next time the app starts. Saved files are not deleted.
 - Audio downloads can be converted with the encoding preset selected in Settings (for example mp3), using the FFmpeg packaged in the app. Only the converted file is saved by default; the "Keep the original audio" switch saves the original too. See [FFMPEG-INTEGRATION.md](FFMPEG-INTEGRATION.md).
-- Settings in the interface: app language (System, English or Español; "System" follows the device language when it is translated and otherwise uses English), permissions, terminal language, yewtube options (audio and video format, maximum resolution, order, columns, show video, repeat, history), encoding presets with their editor, and importable YouTube cookies.
+- Settings in the interface, grouped into sections: app language (System, English or Español; "System" follows the device language when it is translated and otherwise uses English), startup (the tab shown when the app opens: Search, Playlists or History; and clearing the downloads list on close), permissions, terminal language, yewtube options (audio and video format, maximum resolution, order, columns, show video, repeat, history), encoding presets with their editor, and importable YouTube cookies. The startup tab applies each time the UI-mode screen is opened, including when coming back from the terminal.
 - Link opening in Android applications and access to the Android share chooser.
 - Python adapters that adjust yewtube at runtime; this is not an independent replacement for that project.
 - Embedded QuickJS-NG for the JavaScript challenges used by yt-dlp.
@@ -189,6 +201,8 @@ Changing a dependency does not replace building and testing on a device. A `Fail
 Checked on a device: the FFmpeg build and audio conversion on download (only the converted file remains), the playlist view with removing and adding entries, recovery of the Search results, reloading the open playlist after adding, the app language selector and the translated preset editor.
 
 Not checked: the "Keep the original audio" switch (added after those tests), audio export on Android 8 and 9 (the fix comes from reading the code, not from a test), the seven encoding profiles, the 16 KB alignment of the binaries and license compatibility of a specific APK. Download notifications, persistence of their list, the Settings options and closing from recents are not recorded as confirmed either.
+
+Also not checked, and not compiled when this was written, are the changes made after the earlier tests: the controls below the video, full screen and rotation, the order picker and the search box x, recording the history when a track starts playing, refreshing the tab when the history is cleared, the startup tab and clearing the downloads list on close.
 
 Known limitations: conversion covers audio only, its progress is indeterminate and, if the preset does not accept the downloaded extension, the client keeps the original without a warning. The added and removed messages of playlists depend on yewtube's translation catalogue and may appear in English. On Android 8 and 9, downloads are not exported to the public Downloads folder.
 
