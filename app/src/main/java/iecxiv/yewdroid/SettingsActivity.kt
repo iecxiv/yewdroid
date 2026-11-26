@@ -132,6 +132,13 @@ private fun appDetails(ctx: Context) =
 /** The YouTube cookies file the Python session hands to yt-dlp (yt_term.py looks for it by name). */
 private fun cookiesFile(ctx: Context) = File(ctx.filesDir, "cookies.txt")
 
+/** True when the text has at least one Netscape-format cookie line for YouTube or Google. */
+private fun hasYoutubeCookie(text: String): Boolean = text.lineSequence().any { raw ->
+    val line = raw.removePrefix("#HttpOnly_")
+    !line.startsWith("#") && line.split('\t').size >= 7 &&
+        (line.contains("youtube.com") || line.contains("google.com"))
+}
+
 /**
  * Copies a cookies.txt (Netscape format) chosen by the user into the app's private storage.
  * Returns false when the file is empty, too large or has no YouTube/Google cookie line.
@@ -139,12 +146,7 @@ private fun cookiesFile(ctx: Context) = File(ctx.filesDir, "cookies.txt")
 private fun importCookies(ctx: Context, uri: Uri): Boolean = try {
     val bytes = ctx.contentResolver.openInputStream(uri)?.use { it.readBytes() }
     val text = bytes?.takeIf { it.isNotEmpty() && it.size <= 5_000_000 }?.toString(Charsets.UTF_8)
-    val valid = text != null && text.lineSequence().any { raw ->
-        val line = raw.removePrefix("#HttpOnly_")
-        !line.startsWith("#") && line.split('\t').size >= 7 &&
-            (line.contains("youtube.com") || line.contains("google.com"))
-    }
-    if (valid && text != null) {
+    if (text != null && hasYoutubeCookie(text)) {
         val header = "# Netscape HTTP Cookie File"
         val content = if (text.contains("Netscape HTTP Cookie File")) text else "$header\n$text"
         val temp = File(ctx.filesDir, "cookies.txt.tmp")
