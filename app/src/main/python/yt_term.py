@@ -28,6 +28,17 @@ _background = [True]
 _mode = {"shuffle": False, "repeat": 0}
 # Value of the "show video" setting the last time it was looked at (None before the first look).
 _last_video = [None]
+# Timing log: when the Python side was loaded and when the current play request was made.
+_T0 = time.monotonic()
+_T = {"play": None}
+
+
+def _tlog(message):
+    """One timing line in Logcat (tag python.stderr), to see where the seconds of a play request go."""
+    try:
+        _orig_err.write("[time] +%.1fs %s\n" % (time.monotonic() - _T0, message))
+    except Exception:
+        pass
 
 
 class _Out:
@@ -298,19 +309,45 @@ def _find_qjs():
         return None
 
 
+def _patch_subprocess_timing():
+    """Logs how long each run of the QuickJS binary takes (the JavaScript challenges of YouTube)."""
+    import subprocess
+    original = subprocess.Popen.communicate
+
+    def communicate(self, *args, **kwargs):
+        started = time.monotonic()
+        try:
+            return original(self, *args, **kwargs)
+        finally:
+            try:
+                command = self.args if isinstance(self.args, (list, tuple)) else [self.args]
+                if any("qjs" in str(part) for part in command):
+                    _tlog("quickjs run took %.1fs" % (time.monotonic() - started))
+            except Exception:
+                pass
+
+    subprocess.Popen.communicate = communicate
+
+
 def _patch_js_runtime():
     """Injects js_runtimes=quickjs and the imported YouTube cookies (files_dir/cookies.txt, when
-    present) into every yt_dlp.YoutubeDL instance."""
+    present) into every yt_dlp.YoutubeDL instance. Also logs the time of each extract_info call."""
     import yt_dlp
     qjs = _find_qjs()
     if qjs:
         _orig_err.write("[js] quickjs: %s\n" % qjs)
     else:
         _orig_err.write("[js] libqjs.so not found: yt-dlp has no JS runtime\n")
+    try:
+        _patch_subprocess_timing()
+    except Exception:
+        pass
     Orig = yt_dlp.YoutubeDL
 
     class YDL(Orig):
         def __init__(self, params=None, auto_init=True):
+            # [seconds waiting for the servers to answer, number of requests]
+            self._net = [0.0, 0]
             p = dict(params or {})
             if qjs:
                 p.setdefault("js_runtimes", {"quickjs": {"path": qjs}})
@@ -318,6 +355,30 @@ def _patch_js_runtime():
             if os.path.isfile(cookies):
                 p.setdefault("cookiefile", cookies)
             super().__init__(p, auto_init)
+
+        def urlopen(self, req):
+            started = time.monotonic()
+            try:
+                return super().urlopen(req)
+            finally:
+                try:
+                    self._net[0] += time.monotonic() - started
+                    self._net[1] += 1
+                except Exception:
+                    pass
+
+        def extract_info(self, url, *args, **kwargs):
+            started = time.monotonic()
+            before = list(self._net)
+            try:
+                return super().extract_info(url, *args, **kwargs)
+            finally:
+                try:
+                    _tlog("extract_info took %.1fs (%d requests, %.1fs until the first byte of each) %s" % (
+                        time.monotonic() - started, self._net[1] - before[1],
+                        self._net[0] - before[0], str(url)[-40:]))
+                except Exception:
+                    pass
 
     yt_dlp.YoutubeDL = YDL
 
@@ -481,6 +542,8 @@ def _make_player_class(CmdPlayer):
             self._orig = None
             self._fresh = True
             self._ok = False
+            _T["play"] = time.monotonic()
+            _tlog("play requested")
             if not _background[0]:
                 try:
                     return super().play(*args, **kwargs)
@@ -535,6 +598,10 @@ def _make_player_class(CmdPlayer):
                           or getattr(song, "author", None) or "yewtube")
                 thumb = "https://i.ytimg.com/vi/%s/hqdefault.jpg" % song.ytid
                 video = isinstance(self.stream, dict) and self.stream.get("mtype") == "video"
+                if _T["play"] is not None:
+                    _tlog("stream ready %.1fs after the request (%s)" % (
+                        time.monotonic() - _T["play"], "video" if video else "audio"))
+                    _T["play"] = None
                 _sink.video(bool(video))
                 _sink.mode(True)
                 _sink.play(self.stream["url"], str(song.title), str(artist),
@@ -548,8 +615,10 @@ def _make_player_class(CmdPlayer):
                     break
                 # The "show video" setting changed: the same track starts again with the other kind of
                 # stream (the app resumes it at the same position).
+                _T["play"] = time.monotonic()
                 self._refresh_stream()
             action = self._action
+            _T["play"] = time.monotonic()
             if action == "prev":
                 self.previous()
             elif action == "stop":
@@ -596,10 +665,12 @@ def _run(files_dir):
         _prepare_env(files_dir)
         _stub_pip()
         _stub_readline()
+        imported = time.monotonic()
         import mps_youtube.main as ymain
         from mps_youtube import g, util, screen, terminalsize
         from mps_youtube import history as yhistory, player as yplayer
         from mps_youtube.player import CmdPlayer
+        _tlog("yewtube imported in %.1fs" % (time.monotonic() - imported))
 
         _patch_js_runtime()
         _patch_downloads()
