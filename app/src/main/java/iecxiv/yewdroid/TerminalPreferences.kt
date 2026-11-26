@@ -24,15 +24,14 @@ private val Context.terminalDataStore by preferencesDataStore(name = "terminal_p
 
 object TerminalPreferences {
     private const val MAX_HISTORY = 500
-    const val LANGUAGE_SYSTEM = "system"
-    /** Values accepted for the terminal language: "system" or an i18n_<code> catalogue. */
-    val LANGUAGES = listOf(LANGUAGE_SYSTEM, "es")
+    /** Terminal translation languages: "system" follows the phone, anything else is a language code. */
+    private val LANGUAGES = setOf("system", "es")
     private val fontSize = floatPreferencesKey("font_size_sp")
     private val commandHistory = stringPreferencesKey("command_history_json")
     private val terminalModeKey = booleanPreferencesKey("terminal_mode")
     private val translateKey = booleanPreferencesKey("translate_output")
     private val headerExpandedKey = booleanPreferencesKey("header_expanded")
-    private val languageKey = stringPreferencesKey("terminal_language")
+    private val terminalLanguageKey = stringPreferencesKey("terminal_language")
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val writes = Channel<Pair<Context, Float>>(Channel.CONFLATED)
     // Append commands in order: unlike zoom changes, commands must not be conflated.
@@ -99,7 +98,7 @@ object TerminalPreferences {
         scope.launch {
             for ((context, choice) in languageWrites) {
                 try {
-                    context.terminalDataStore.edit { it[languageKey] = choice }
+                    context.terminalDataStore.edit { it[terminalLanguageKey] = choice }
                 } catch (error: IOException) {
                     Log.e("TerminalPreferences", "Cannot save terminal language", error)
                     TerminalHub.onWrite("\n" + context.getString(R.string.pref_terminal_language_save_failed) + "\n")
@@ -150,19 +149,6 @@ object TerminalPreferences {
         translateWrites.trySend(context.applicationContext to enabled)
     }
 
-    fun terminalLanguage(context: Context): Flow<String> = context.applicationContext.terminalDataStore.data
-        .catch { error ->
-            if (error is IOException) {
-                Log.e("TerminalPreferences", "Cannot read terminal language", error)
-                emit(emptyPreferences())
-            } else throw error
-        }
-        .map { values -> values[languageKey]?.takeIf { it in LANGUAGES } ?: LANGUAGE_SYSTEM }
-
-    fun saveTerminalLanguage(context: Context, choice: String) {
-        if (choice in LANGUAGES) languageWrites.trySend(context.applicationContext to choice)
-    }
-
     fun headerExpanded(context: Context): Flow<Boolean?> = context.applicationContext.terminalDataStore.data
         .catch { error ->
             if (error is IOException) {
@@ -174,6 +160,19 @@ object TerminalPreferences {
 
     fun saveHeaderExpanded(context: Context, expanded: Boolean) {
         headerWrites.trySend(context.applicationContext to expanded)
+    }
+
+    fun terminalLanguage(context: Context): Flow<String> = context.applicationContext.terminalDataStore.data
+        .catch { error ->
+            if (error is IOException) {
+                Log.e("TerminalPreferences", "Cannot read terminal language", error)
+                emit(emptyPreferences())
+            } else throw error
+        }
+        .map { values -> values[terminalLanguageKey]?.takeIf { it in LANGUAGES } ?: "system" }
+
+    fun saveTerminalLanguage(context: Context, choice: String) {
+        if (choice in LANGUAGES) languageWrites.trySend(context.applicationContext to choice)
     }
 
     fun history(context: Context): Flow<List<String>?> = context.applicationContext.terminalDataStore.data
