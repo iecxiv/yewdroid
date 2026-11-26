@@ -116,7 +116,12 @@ fun PlayerScreen(onClose: () -> Unit, onFullscreen: () -> Unit, modifier: Modifi
     val repeat by TerminalHub.repeat.collectAsState()
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val current = queue.items.getOrNull(queue.index)
-    Column(modifier.background(BG)) {
+    // The panel takes every tap: without a handler of its own, a tap on a part of it that does nothing would pass
+    // through to the results list underneath and start whatever result is there.
+    Column(
+        modifier.background(BG)
+            .clickable(interactionSource = null, indication = null, onClick = {})
+    ) {
         IconButton(onClick = onClose) {
             Icon(Icons.Filled.KeyboardArrowDown, contentDescription = stringResource(R.string.player_minimize), tint = FG)
         }
