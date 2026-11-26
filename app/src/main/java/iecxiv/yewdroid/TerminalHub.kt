@@ -91,6 +91,9 @@ object TerminalHub {
     @Volatile private var startReported = false
     /** True once a command was typed in the terminal: the list yewtube holds may no longer be the client's. */
     @Volatile private var terminalTouched = false
+    /** Where to resume the track that is started again after the "show video" setting changed, and its title. */
+    @Volatile private var resumeMs = 0L
+    @Volatile private var resumeTitle = ""
     private var surface: SurfaceView? = null
     private var started = false
     private val sink = HubSink()
@@ -230,6 +233,21 @@ object TerminalHub {
                 positionMs.value = posMs
                 durationMs.value = if (durMs == C.TIME_UNSET || durMs < 0) 0L else durMs
             }
+            applyVideoSetting()
+        }
+    }
+
+    /**
+     * When the "show video" setting changes (in Settings or with the set command) the track that is playing
+     * is started again with the other kind of stream, resuming where it was.
+     */
+    private fun applyVideoSetting() {
+        val module = py ?: return
+        val needed = runCatching { module.callAttr("sync_video_mode").toBoolean() }.getOrDefault(false)
+        if (needed) {
+            resumeMs = positionMs.value
+            resumeTitle = nowPlaying.value
+            runCatching { module.callAttr("restream") }
         }
     }
 
@@ -314,9 +332,13 @@ object TerminalHub {
     fun onVideo(on: Boolean) { nextVideo = on }
 
     fun onPlay(url: String, title: String, artist: String, thumb: String) {
+        // The same track started again after the "show video" setting changed resumes where it was.
+        val start = if (resumeMs > 0L && title == resumeTitle) resumeMs else 0L
+        resumeMs = 0L
+        resumeTitle = ""
         nowPlaying.value = title
         videoOn.value = nextVideo
-        positionMs.value = 0L
+        positionMs.value = start
         durationMs.value = 0L
         // A new track: it is reported to the history once it really starts sounding.
         startReported = false
@@ -332,7 +354,7 @@ object TerminalHub {
             } else {
                 val meta = MediaMetadata.Builder().setTitle(title).setArtist(artist)
                     .setArtworkUri(if (thumb.isNotBlank()) Uri.parse(thumb) else null).build()
-                p.setMediaItem(MediaItem.Builder().setUri(url).setMediaMetadata(meta).build())
+                p.setMediaItem(MediaItem.Builder().setUri(url).setMediaMetadata(meta).build(), start)
                 p.prepare()
                 p.play()
             }

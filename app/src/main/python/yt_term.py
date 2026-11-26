@@ -26,6 +26,8 @@ _orig_err = sys.stderr
 _background = [True]
 # Playback modes chosen in the player: shuffle on/off and repeat 0 = off, 1 = the list, 2 = one track.
 _mode = {"shuffle": False, "repeat": 0}
+# Value of the "show video" setting the last time it was looked at (None before the first look).
+_last_video = [None]
 
 
 class _Out:
@@ -108,6 +110,34 @@ def player_event(action):
             p.finish(str(action))
     except Exception:
         traceback.print_exc(file=_orig_err)
+
+
+def sync_video_mode():
+    """True when the "show video" setting changed and the track playing has the other kind of stream.
+    The app calls it every second; it also runs while nothing plays, to keep the last value current."""
+    try:
+        from mps_youtube import config, g
+        wanted = bool(config.SHOW_VIDEO.get)
+        previous = _last_video[0]
+        _last_video[0] = wanted
+        if previous is None or previous == wanted:
+            return False
+        p = getattr(g, "PLAYER_OBJ", None)
+        if p is None or not getattr(p, "_active", False):
+            return False
+        # A choice made for this playback (audio only, video window...) beats the setting, as in yewtube.
+        if getattr(p, "override", False) in ("audio", "fullscreen", "window", "forcevid"):
+            return False
+        stream = getattr(p, "stream", None)
+        current = isinstance(stream, dict) and stream.get("mtype") == "video"
+        return wanted != current
+    except Exception:
+        return False
+
+
+def restream():
+    """Starts the current track again with the stream the "show video" setting asks for."""
+    player_event("restream")
 
 
 def set_play_mode(shuffle, repeat):
@@ -469,6 +499,17 @@ def _make_player_class(CmdPlayer):
             self._thread.start()
             return None
 
+        def _refresh_stream(self):
+            """Picks the stream of the current track again, following the "show video" setting now in force."""
+            try:
+                from mps_youtube import player as yplayer
+                details = yplayer.stream_details(self.song, override=self.override,
+                                                 softrepeat=getattr(self, "softrepeat", False))
+                if details:
+                    self.video, self.stream, self.override = details
+            except Exception:
+                traceback.print_exc(file=_orig_err)
+
         def _launch_player(self):
             if self._halt:
                 self.stop()
@@ -477,23 +518,29 @@ def _make_player_class(CmdPlayer):
                 self._fresh = False
                 if _mode["shuffle"]:
                     self.apply_shuffle(True)
-            self._evt.clear()
-            self._action = "next"
-            self._active = True
-            song = self.song
-            artist = (getattr(song, "uploader", None)
-                      or getattr(song, "author", None) or "yewtube")
-            thumb = "https://i.ytimg.com/vi/%s/hqdefault.jpg" % song.ytid
-            video = isinstance(self.stream, dict) and self.stream.get("mtype") == "video"
-            _sink.video(bool(video))
-            _sink.mode(True)
-            _sink.play(self.stream["url"], str(song.title), str(artist),
-                       thumb, int(song.length or 0))
-            if self._halt:
-                self._action = "stop"
-            else:
-                self._evt.wait()
-            self._active = False
+            while True:
+                self._evt.clear()
+                self._action = "next"
+                self._active = True
+                song = self.song
+                artist = (getattr(song, "uploader", None)
+                          or getattr(song, "author", None) or "yewtube")
+                thumb = "https://i.ytimg.com/vi/%s/hqdefault.jpg" % song.ytid
+                video = isinstance(self.stream, dict) and self.stream.get("mtype") == "video"
+                _sink.video(bool(video))
+                _sink.mode(True)
+                _sink.play(self.stream["url"], str(song.title), str(artist),
+                           thumb, int(song.length or 0))
+                if self._halt:
+                    self._action = "stop"
+                else:
+                    self._evt.wait()
+                self._active = False
+                if self._action != "restream":
+                    break
+                # The "show video" setting changed: the same track starts again with the other kind of
+                # stream (the app resumes it at the same position).
+                self._refresh_stream()
             action = self._action
             if action == "prev":
                 self.previous()
