@@ -12,6 +12,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
@@ -61,6 +62,11 @@ fun MiniPlayer(onOpen: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (videoOn) {
+                // While the video is only in the mini player the screen is allowed to turn off.
+                DisposableEffect(Unit) {
+                    TerminalHub.setMiniVideo(true)
+                    onDispose { TerminalHub.setMiniVideo(false) }
+                }
                 Box(
                     Modifier.width(64.dp).height(36.dp).background(Color.Black),
                     contentAlignment = Alignment.Center
