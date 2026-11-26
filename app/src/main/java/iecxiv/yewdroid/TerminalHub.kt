@@ -104,7 +104,7 @@ object TerminalHub {
     /** True when Android refused audio focus to a track that never started: it starts when the app is in front. */
     @Volatile private var resumeOnForeground = false
     private var surface: SurfaceView? = null
-    /** True while the video is shown in the mini player, where the screen is allowed to turn off. */
+    /** True while the video is shown in the mini player, where it does not keep the screen on. */
     private var miniVideo = false
     private var started = false
     private val sink = HubSink()
@@ -162,14 +162,14 @@ object TerminalHub {
 
     /**
      * Keeps the screen from turning off while a video is showing and playing in the terminal, the expanded
-     * player or fullscreen. It may turn off when the video is paused, the track is audio only, or the video is
-     * only in the mini player. Runs on the main thread, where the views live.
+     * player or fullscreen. It may turn off when the video is paused, the track is audio only, or the video
+     * is only in the mini player. Runs on the main thread, where the views live.
      */
     private fun updateKeepScreenOn() {
         surface?.keepScreenOn = audioOn.value && videoOn.value && playing.value && !miniVideo
     }
 
-    /** The mini player calls this while it shows the video, so the screen can turn off then. Main thread. */
+    /** The mini player calls this while it shows the video, so that video does not keep the screen on. */
     fun setMiniVideo(on: Boolean) {
         miniVideo = on
         updateKeepScreenOn()

@@ -62,7 +62,7 @@ fun MiniPlayer(onOpen: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (videoOn) {
-                // The screen may turn off while the video is only in the mini player.
+                // The video in the mini player does not keep the screen on; the expanded player does.
                 DisposableEffect(Unit) {
                     TerminalHub.setMiniVideo(true)
                     onDispose { TerminalHub.setMiniVideo(false) }
