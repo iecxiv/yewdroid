@@ -23,6 +23,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -53,6 +54,15 @@ private val ERROR = Color(0xFFE06C75)
 private val LANGUAGES = listOf(
     "system" to R.string.language_system,
     "es" to R.string.language_spanish
+)
+
+/** Guidance points shown before the user picks a cookies file. */
+private val COOKIES_GUIDE = listOf(
+    R.string.cookies_info_1,
+    R.string.cookies_info_2,
+    R.string.cookies_info_3,
+    R.string.cookies_info_4,
+    R.string.cookies_info_5
 )
 
 class SettingsActivity : ComponentActivity() {
@@ -120,6 +130,43 @@ private fun importCookies(ctx: Context, uri: Uri): Boolean = try {
     false
 }
 
+/** Explains the risks and the right way to export cookies before the file picker opens. */
+@Composable
+private fun CookiesGuideDialog(onContinue: () -> Unit, onDismiss: () -> Unit) {
+    val body = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = FG)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF1B1B1B),
+        title = {
+            Text(
+                stringResource(R.string.cookies_info_title),
+                style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 16.sp, color = FG)
+            )
+        },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                COOKIES_GUIDE.forEachIndexed { index, id ->
+                    Text(
+                        "${index + 1}. " + stringResource(id),
+                        style = body,
+                        modifier = Modifier.padding(bottom = 10.dp)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onContinue, colors = ButtonDefaults.textButtonColors(contentColor = ACCENT)) {
+                Text(stringResource(R.string.cookies_info_continue))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, colors = ButtonDefaults.textButtonColors(contentColor = Color.Gray)) {
+                Text(stringResource(R.string.dialog_cancel))
+            }
+        }
+    )
+}
+
 @Composable
 private fun SettingsScreen(resumes: Int, onBack: () -> Unit) {
     val ctx = LocalContext.current
@@ -138,6 +185,7 @@ private fun SettingsScreen(resumes: Int, onBack: () -> Unit) {
     val translationAvailable by TerminalHub.translationAvailable.collectAsState()
     var cookiesSaved by remember { mutableStateOf(cookiesFile(ctx).isFile) }
     var cookiesInvalid by remember { mutableStateOf(false) }
+    var cookiesGuide by remember { mutableStateOf(false) }
     val cookiesLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             cookiesInvalid = !importCookies(ctx, uri)
@@ -243,7 +291,7 @@ private fun SettingsScreen(resumes: Int, onBack: () -> Unit) {
             }
             Row {
                 TextButton(
-                    onClick = { cookiesLauncher.launch(arrayOf("*/*")) },
+                    onClick = { cookiesGuide = true },
                     colors = ButtonDefaults.textButtonColors(contentColor = ACCENT)
                 ) { Text(stringResource(R.string.cookies_import)) }
                 if (cookiesSaved) {
@@ -259,6 +307,15 @@ private fun SettingsScreen(resumes: Int, onBack: () -> Unit) {
             }
             Spacer(Modifier.height(24.dp))
         }
+    }
+    if (cookiesGuide) {
+        CookiesGuideDialog(
+            onContinue = {
+                cookiesGuide = false
+                cookiesLauncher.launch(arrayOf("*/*"))
+            },
+            onDismiss = { cookiesGuide = false }
+        )
     }
 }
 

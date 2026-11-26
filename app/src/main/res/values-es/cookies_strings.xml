@@ -9,4 +9,11 @@
     <string name="cookies_invalid">Ese archivo no parece un cookies.txt con cookies de YouTube o Google.</string>
     <string name="cookies_hint">YouTube pidió confirmar que no eres un robot. Prueba más tarde o en otra red, o importa cookies en Ajustes.</string>
     <string name="cookies_open_settings">Ajustes</string>
+    <string name="cookies_info_title">Antes de importar cookies</string>
+    <string name="cookies_info_1">Usa una cuenta secundaria de YouTube, no la principal. Las peticiones automatizadas pueden hacer que YouTube limite una cuenta.</string>
+    <string name="cookies_info_2">Las cookies funcionan como un inicio de sesión: quien tenga el archivo puede usar esa sesión. La app lo guarda en su almacenamiento privado. No lo compartas y bórralo desde aquí cuando ya no lo necesites.</string>
+    <string name="cookies_info_3">Expórtalas desde una ventana privada para que no caduquen: inicia sesión en YouTube en una ventana privada o de incógnito, abre youtube.com/robots.txt en esa misma pestaña, exporta las cookies de youtube.com con una extensión de cookies.txt y cierra la ventana sin cerrar sesión. YouTube renueva las cookies de las sesiones abiertas, así que un archivo sacado de tu navegador de uso diario caduca pronto.</string>
+    <string name="cookies_info_4">El formato debe ser Netscape HTTP Cookie File, no JSON. Una extensión conocida para Chrome es Get cookies.txt LOCALLY, y para Firefox cookies.txt. Algunas extensiones se han retirado o han cambiado de dueño, así que desconfía de las poco conocidas.</string>
+    <string name="cookies_info_5">La app actualiza el archivo al usarlo (yt-dlp lo reescribe), así que puede quedar muy distinto del original. Guarda una copia y, si deja de funcionar, vuelve a exportarlo.</string>
+    <string name="cookies_info_continue">Continuar</string>
 </resources>
