@@ -65,7 +65,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -331,12 +330,7 @@ fun TerminalScreen() {
                 }
             }
         } else {
-            Box(Modifier.weight(1f).fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                Text(
-                    stringResource(R.string.main_client_placeholder),
-                    style = uiStyle.copy(textAlign = TextAlign.Center)
-                )
-            }
+            ClientScreen(Modifier.weight(1f).fillMaxWidth())
         }
 
         if (playing) {

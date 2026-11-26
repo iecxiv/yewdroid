@@ -200,6 +200,16 @@ def translate(text):
         return text
 
 
+def translate_message(text):
+    """Translate a message for the native client, whatever the terminal toggle says."""
+    if not (_state["plain"] or _state["patterns"]):
+        return text
+    try:
+        return "\n".join(_translate_line(line) for line in str(text).split("\n"))
+    except Exception:
+        return text
+
+
 def install(term):
     if getattr(term, "_i18n_installed", False):
         return

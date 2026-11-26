@@ -31,6 +31,16 @@ def install(term):
     original_patch = term._patch_traceback
     screen_installed = [False]
 
+    def idle():
+        """Tell the sink yewtube is waiting for a command (the native client refreshes then)."""
+        notify = getattr(term._sink, "idle", None)
+        if notify is None:
+            return
+        try:
+            notify()
+        except Exception:
+            traceback.print_exc(file=term._orig_err)
+
     def install_screen():
         original_patch()
         if screen_installed[0]:
@@ -182,6 +192,7 @@ def install(term):
             term._in.q.put(redraw_token)
 
     def readline(self, *args):
+        idle()
         while True:
             item = self.q.get()
             if item is redraw_token:
@@ -189,6 +200,7 @@ def install(term):
                     redraw[0]()
                 except Exception:
                     traceback.print_exc(file=term._orig_err)
+                idle()
                 continue
             if item is token:
                 with lock:
@@ -199,6 +211,7 @@ def install(term):
                         redraw[0]()
                     except Exception:
                         traceback.print_exc(file=term._orig_err)
+                    idle()
                 continue
             if item is term._INTR:
                 raise KeyboardInterrupt
@@ -208,3 +221,4 @@ def install(term):
     term._In.readline = readline
     term.resize = resize
     term.request_redraw = request_redraw
+    term.last_message = lambda: (last[0] or (None, None, "", None))[2]

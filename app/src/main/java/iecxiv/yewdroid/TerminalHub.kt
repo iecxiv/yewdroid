@@ -35,6 +35,7 @@ interface TermSink {
     fun video(on: Boolean)
     fun mode(playing: Boolean)
     fun stopPlayback()
+    fun idle()
 }
 
 /** Public named class so Chaquopy can call it from Python. */
@@ -46,12 +47,16 @@ class HubSink : TermSink {
     override fun video(on: Boolean) { TerminalHub.onVideo(on) }
     override fun mode(playing: Boolean) { TerminalHub.playing.value = playing }
     override fun stopPlayback() { TerminalHub.onStopPlayback() }
+    override fun idle() { TerminalHub.onIdle() }
 }
 
 object TerminalHub {
     private val buffer = TermBuffer()
     private val _lines = MutableStateFlow<List<AnnotatedString>>(emptyList())
     val lines: StateFlow<List<AnnotatedString>> = _lines
+    private val _client = MutableStateFlow(ClientState())
+    /** Results shown by the native client, refreshed whenever yewtube is waiting for a command. */
+    val client: StateFlow<ClientState> = _client
     val playing = MutableStateFlow(false)
     val audioOn = MutableStateFlow(false)
     val nowPlaying = MutableStateFlow("")
@@ -177,6 +182,22 @@ object TerminalHub {
                 py?.callAttr("request_redraw")
             }
         }
+    }
+
+    /** Called from Python whenever yewtube starts waiting for a command. */
+    fun onIdle() {
+        scope.launch {
+            val next = runCatching {
+                parseClientState(Python.getInstance().getModule("yt_client").callAttr("snapshot").toString())
+            }.getOrNull()
+            _client.value = next ?: _client.value.copy(busy = false, ready = true)
+        }
+    }
+
+    /** Sends a yewtube command on behalf of the native client (nothing is echoed to the terminal). */
+    fun runCommand(line: String) {
+        _client.value = _client.value.copy(busy = true)
+        scope.launch { runCatching { py?.callAttr("send", line) } }
     }
 
     private suspend fun tick() {
