@@ -22,6 +22,9 @@
     <string name="client_search_hint">Buscar en YouTube</string>
     <string name="client_search">Buscar</string>
     <string name="client_autoqueue">Poner en cola automáticamente</string>
+    <string name="client_history_title">Búsquedas recientes</string>
+    <string name="client_history_clear">Borrar</string>
+    <string name="client_history_remove">Quitar del historial</string>
     <string name="client_empty">Busca algo para ver resultados.</string>
     <string name="client_page">Página %1$d de %2$d</string>
     <string name="client_prev">Página anterior</string>
@@ -48,6 +51,7 @@
     <string name="pref_zoom_save_failed">[ajustes] No se pudo guardar el zoom.</string>
     <string name="pref_history_save_failed">[historial] No se pudo guardar el comando.</string>
     <string name="pref_history_read_failed">[historial] No se pudo leer el historial guardado.</string>
+    <string name="pref_search_history_save_failed">[historial] No se pudo guardar la búsqueda.</string>
     <string name="pref_mode_save_failed">[ajustes] No se pudo guardar el modo.</string>
     <string name="pref_language_save_failed">[ajustes] No se pudo guardar el idioma de la salida.</string>
     <string name="pref_header_save_failed">[ajustes] No se pudo guardar el estado de la cabecera.</string>

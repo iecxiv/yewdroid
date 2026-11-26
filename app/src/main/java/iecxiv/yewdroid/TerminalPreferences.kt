@@ -24,10 +24,12 @@ private val Context.terminalDataStore by preferencesDataStore(name = "terminal_p
 
 object TerminalPreferences {
     private const val MAX_HISTORY = 500
+    private const val MAX_SEARCHES = 30
     /** Terminal translation languages: "system" follows the phone, anything else is a language code. */
     private val LANGUAGES = setOf("system", "es")
     private val fontSize = floatPreferencesKey("font_size_sp")
     private val commandHistory = stringPreferencesKey("command_history_json")
+    private val searchHistoryKey = stringPreferencesKey("search_history_json")
     private val terminalModeKey = booleanPreferencesKey("terminal_mode")
     private val translateKey = booleanPreferencesKey("translate_output")
     private val headerExpandedKey = booleanPreferencesKey("header_expanded")
@@ -37,6 +39,8 @@ object TerminalPreferences {
     private val writes = Channel<Pair<Context, Float>>(Channel.CONFLATED)
     // Append commands in order: unlike zoom changes, commands must not be conflated.
     private val historyWrites = Channel<Pair<Context, String>>(Channel.UNLIMITED)
+    // Search history edits are applied in order too (each one transforms the stored list).
+    private val searchWrites = Channel<Pair<Context, (List<String>) -> List<String>>>(Channel.UNLIMITED)
     private val modeWrites = Channel<Pair<Context, Boolean>>(Channel.CONFLATED)
     private val translateWrites = Channel<Pair<Context, Boolean>>(Channel.CONFLATED)
     private val headerWrites = Channel<Pair<Context, Boolean>>(Channel.CONFLATED)
@@ -64,6 +68,18 @@ object TerminalPreferences {
                 } catch (error: IOException) {
                     Log.e("TerminalPreferences", "Cannot save command history", error)
                     TerminalHub.onWrite("\n" + context.getString(R.string.pref_history_save_failed) + "\n")
+                }
+            }
+        }
+        scope.launch {
+            for ((context, change) in searchWrites) {
+                try {
+                    context.terminalDataStore.edit { values ->
+                        values[searchHistoryKey] = JSONArray(change(decodeHistory(values[searchHistoryKey]))).toString()
+                    }
+                } catch (error: IOException) {
+                    Log.e("TerminalPreferences", "Cannot save search history", error)
+                    TerminalHub.onWrite("\n" + context.getString(R.string.pref_search_history_save_failed) + "\n")
                 }
             }
         }
@@ -199,6 +215,33 @@ object TerminalPreferences {
 
     fun saveClientAutoQueue(context: Context, enabled: Boolean) {
         autoQueueWrites.trySend(context.applicationContext to enabled)
+    }
+
+    /** Recent searches of the native client, most recent first. */
+    fun searchHistory(context: Context): Flow<List<String>> = context.applicationContext.terminalDataStore.data
+        .catch { error ->
+            if (error is IOException) {
+                Log.e("TerminalPreferences", "Cannot read search history", error)
+                emit(emptyPreferences())
+            } else throw error
+        }
+        .map { values -> decodeHistory(values[searchHistoryKey]) }
+
+    /** Adds [query] on top; an equal entry (ignoring case) moves up instead of repeating. */
+    fun addSearch(context: Context, query: String) {
+        val text = query.trim()
+        if (text.isEmpty()) return
+        searchWrites.trySend(context.applicationContext to { list ->
+            (listOf(text) + list.filterNot { it.equals(text, ignoreCase = true) }).take(MAX_SEARCHES)
+        })
+    }
+
+    fun removeSearch(context: Context, query: String) {
+        searchWrites.trySend(context.applicationContext to { list -> list.filterNot { it == query } })
+    }
+
+    fun clearSearches(context: Context) {
+        searchWrites.trySend(context.applicationContext to { _ -> emptyList() })
     }
 
     fun history(context: Context): Flow<List<String>?> = context.applicationContext.terminalDataStore.data

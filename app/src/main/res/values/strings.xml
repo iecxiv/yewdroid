@@ -22,6 +22,9 @@
     <string name="client_search_hint">Search YouTube</string>
     <string name="client_search">Search</string>
     <string name="client_autoqueue">Auto-queue the list</string>
+    <string name="client_history_title">Recent searches</string>
+    <string name="client_history_clear">Clear</string>
+    <string name="client_history_remove">Remove from history</string>
     <string name="client_empty">Search for something to see results.</string>
     <string name="client_page">Page %1$d of %2$d</string>
     <string name="client_prev">Previous page</string>
@@ -48,6 +51,7 @@
     <string name="pref_zoom_save_failed">[settings] Could not save the zoom.</string>
     <string name="pref_history_save_failed">[history] Could not save the command.</string>
     <string name="pref_history_read_failed">[history] Could not read the saved history.</string>
+    <string name="pref_search_history_save_failed">[history] Could not save the search.</string>
     <string name="pref_mode_save_failed">[settings] Could not save the mode.</string>
     <string name="pref_language_save_failed">[settings] Could not save the output language.</string>
     <string name="pref_header_save_failed">[settings] Could not save the header state.</string>

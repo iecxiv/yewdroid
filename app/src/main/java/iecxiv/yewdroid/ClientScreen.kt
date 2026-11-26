@@ -16,8 +16,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -26,10 +28,12 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
@@ -85,10 +89,19 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     val focus = LocalFocusManager.current
     val state by TerminalHub.client.collectAsState()
     var query by rememberSaveable { mutableStateOf("") }
+    var focused by remember { mutableStateOf(false) }
     val autoQueueFlow = remember(ctx.applicationContext) { TerminalPreferences.clientAutoQueue(ctx.applicationContext) }
     val savedAutoQueue by autoQueueFlow.collectAsState(initial = null)
     var selectedAutoQueue by remember { mutableStateOf<Boolean?>(null) }
     val autoQueue = selectedAutoQueue ?: savedAutoQueue
+    val searchFlow = remember(ctx.applicationContext) { TerminalPreferences.searchHistory(ctx.applicationContext) }
+    val searches by searchFlow.collectAsState(initial = emptyList())
+    val suggestions = remember(searches, query) {
+        val typed = query.trim()
+        if (typed.isEmpty()) searches
+        else searches.filter { it.contains(typed, ignoreCase = true) && !it.equals(typed, ignoreCase = true) }
+    }
+    val showHistory = focused && suggestions.isNotEmpty()
     LaunchedEffect(Unit) {
         TerminalHub.ensureStarted(ctx.applicationContext, CLIENT_COLS, CLIENT_ROWS)
     }
@@ -97,6 +110,7 @@ fun ClientScreen(modifier: Modifier = Modifier) {
         val text = query.trim().trimStart('.', '/').trim()
         if (text.isNotEmpty()) {
             focus.clearFocus()
+            TerminalPreferences.addSearch(ctx, text)
             TerminalHub.runCommand("/$text")
         }
     }
@@ -109,6 +123,7 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                 value = query,
                 onValueChange = { query = it },
                 modifier = Modifier.weight(1f).padding(vertical = 4.dp)
+                    .onFocusChanged { focused = it.hasFocus }
                     .border(1.dp, ACCENT, RoundedCornerShape(6.dp))
                     .padding(horizontal = 10.dp, vertical = 10.dp),
                 singleLine = true,
@@ -167,7 +182,18 @@ fun ClientScreen(modifier: Modifier = Modifier) {
         if (state.message.isNotEmpty()) {
             Text(state.message, style = small.copy(color = ACCENT), modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
         }
-        if (state.ready && state.items.isEmpty()) {
+        if (showHistory) {
+            SearchHistoryPanel(
+                entries = suggestions,
+                onPick = { entry ->
+                    query = entry
+                    search()
+                },
+                onRemove = { TerminalPreferences.removeSearch(ctx, it) },
+                onClear = { TerminalPreferences.clearSearches(ctx) },
+                modifier = Modifier.weight(1f).fillMaxWidth()
+            )
+        } else if (state.ready && state.items.isEmpty()) {
             Box(Modifier.weight(1f).fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
                 Text(stringResource(R.string.client_empty), style = small.copy(textAlign = TextAlign.Center))
             }
@@ -178,7 +204,7 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                 }
             }
         }
-        if (state.pages > 1) {
+        if (!showHistory && state.pages > 1) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 val hasPrevious = state.page > 0
                 val hasNext = state.page + 1 < state.pages
@@ -200,6 +226,51 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                         contentDescription = stringResource(R.string.client_next),
                         tint = if (hasNext) FG else MUTED
                     )
+                }
+            }
+        }
+    }
+}
+
+/** Recent searches shown in place of the results while the search box has focus. */
+@Composable
+private fun SearchHistoryPanel(
+    entries: List<String>,
+    onPick: (String) -> Unit,
+    onRemove: (String) -> Unit,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier) {
+        Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                stringResource(R.string.client_history_title),
+                style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = ACCENT),
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(onClick = onClear, colors = ButtonDefaults.textButtonColors(contentColor = ACCENT)) {
+                Text(stringResource(R.string.client_history_clear), fontSize = 12.sp)
+            }
+        }
+        LazyColumn(Modifier.fillMaxWidth()) {
+            items(entries, key = { it }) { entry ->
+                Row(
+                    Modifier.fillMaxWidth().clickable { onPick(entry) }.padding(start = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.Search, contentDescription = null, tint = MUTED, modifier = Modifier.size(16.dp))
+                    Text(
+                        entry, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp, color = FG),
+                        modifier = Modifier.weight(1f).padding(start = 10.dp, top = 10.dp, bottom = 10.dp)
+                    )
+                    IconButton(onClick = { onRemove(entry) }) {
+                        Icon(
+                            Icons.Filled.Close,
+                            contentDescription = stringResource(R.string.client_history_remove),
+                            tint = MUTED
+                        )
+                    }
                 }
             }
         }
