@@ -1,5 +1,6 @@
 package iecxiv.yewdroid
 
+import android.content.Context
 import android.graphics.BitmapFactory
 import android.util.LruCache
 import androidx.compose.foundation.Image
@@ -76,6 +77,10 @@ private enum class Section(val label: Int) {
     DOWNLOADS(R.string.dl_tab)
 }
 
+/** The tab chosen in Settings as the one shown when the app opens (Search when unset or unknown). */
+private fun startSection(context: Context): Section =
+    runCatching { Section.valueOf(ClientPrefs.startTab(context)) }.getOrDefault(Section.SEARCH)
+
 /**
  * yewtube selection for result n: "n-" plays n and queues the rest of the page, "n" plays only n.
  */
@@ -130,7 +135,10 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     val formats by DownloadHub.formats.collectAsState()
     val activeDownloads = downloads.items.count { it.active }
     var query by rememberSaveable { mutableStateOf("") }
-    var section by rememberSaveable { mutableStateOf(Section.SEARCH) }
+    // Starts on the tab chosen in Settings; later changes of tab are kept across recreations of the screen.
+    var section by rememberSaveable { mutableStateOf(startSection(ctx)) }
+    // True once the start tab was loaded (the history is only fetched when it is the start tab).
+    var startApplied by rememberSaveable { mutableStateOf(false) }
     // Which tab produced the results yewtube currently holds (history and playlists replace the search results).
     var resultsFrom by rememberSaveable { mutableStateOf(Section.SEARCH) }
     // Last search sent; repeated when the search results kept aside no longer exist (e.g. the app process restarted).
@@ -197,6 +205,14 @@ fun ClientScreen(modifier: Modifier = Modifier) {
             TerminalHub.runCommands("viewstash", command)
         } else {
             TerminalHub.runCommand(command)
+        }
+    }
+
+    // When the start tab is History its entries must be fetched once the session is ready.
+    LaunchedEffect(state.ready) {
+        if (state.ready && !startApplied) {
+            startApplied = true
+            if (section == Section.HISTORY) replaceResults(Section.HISTORY, "history")
         }
     }
 
