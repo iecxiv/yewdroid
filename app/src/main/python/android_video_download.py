@@ -14,17 +14,12 @@ def _publish(path):
     return str(jclass("iecxiv.yewdroid.DownloadPublisher").publish(app, path))
 
 
-def download_video(ytid, folder, hook, height=None, stage=None):
-    """Downloads video + audio and merges them. `height` caps the resolution (None: best);
-    `stage` is an optional callback told which step starts (video, audio, merge, export)."""
+def download_video(ytid, folder, hook, height=None, report=None):
     import yt_dlp
     from java import jclass
     from yt_dlp.utils import sanitize_filename
+    from android_audio_download import was_cancelled
 
-    note = stage or (lambda name: None)
-    video_selector = "bv[ext=mp4][vcodec^=avc1]"
-    if height:
-        video_selector += "[height<=%d]" % int(height)
     folder = os.path.abspath(folder)
     os.makedirs(folder, exist_ok=True)
     muxer = jclass("iecxiv.yewdroid.Mp4Muxer")
@@ -33,13 +28,19 @@ def download_video(ytid, folder, hook, height=None, stage=None):
     try:
         def fetch(label, selector):
             print("\n[download] %s" % label)
+
+            def track(data):
+                hook(data)
+                if report is not None:
+                    report(label, data)
+
             opts = {
                 "outtmpl": os.path.join(work, label + ".%(ext)s"),
                 "format": selector,
                 "noplaylist": True,
                 "quiet": True,
                 "no_warnings": False,
-                "progress_hooks": [hook],
+                "progress_hooks": [track],
                 "fixup": "never",
                 "hls_prefer_native": True,
                 "postprocessors": [],
@@ -55,9 +56,10 @@ def download_video(ytid, folder, hook, height=None, stage=None):
                 raise RuntimeError("Incomplete track: %s" % label)
             return info, path
 
-        note("video")
+        video_selector = "bv[ext=mp4][vcodec^=avc1]"
+        if height:
+            video_selector += "[height<=%d]" % int(height)
         vi, video = fetch("video", video_selector)
-        note("audio")
         _, audio = fetch("audio", "ba[ext=m4a][acodec^=mp4a]")
         title = sanitize_filename(str(vi.get("title") or "video"), restricted=False)[:120]
         safe_id = sanitize_filename(str(ytid), restricted=True)[:32]
@@ -65,12 +67,14 @@ def download_video(ytid, folder, hook, height=None, stage=None):
         # Track filenames must remain distinct even for a pathological title/id.
         if output in (video, audio):
             output = os.path.join(work, "result.mp4")
-        note("merge")
+        if report is not None:
+            report("merge", None)
         print("\n[download] Merging video and audio without re-encoding...")
         muxer.merge(video, audio, output)
         if not os.path.isfile(output) or os.path.getsize(output) == 0:
             raise RuntimeError("The muxer did not produce a valid MP4")
-        note("export")
+        if report is not None:
+            report("export", None)
         print("[download] Exporting to public Downloads...")
         destination = _publish(output)
         # On Android 8/9 the local output is the final file: do not delete it.
@@ -78,7 +82,7 @@ def download_video(ytid, folder, hook, height=None, stage=None):
             print("\nSaved locally: %s" % destination)
             return destination
     except BaseException as exc:
-        if type(exc).__name__ == "DownloadCancelled":
+        if was_cancelled(exc):
             shutil.rmtree(work, ignore_errors=True)
             raise
         message = "Video download/export interrupted. Files kept in: %s" % work

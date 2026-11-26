@@ -102,7 +102,7 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     var focused by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     var adding by remember { mutableStateOf<Int?>(null) }
-    var downloading by remember { mutableStateOf<Pair<ClientItem, String>?>(null) }
+    var downloading by remember { mutableStateOf<Pair<String, ClientItem>?>(null) }
     var clearingHistory by remember { mutableStateOf(false) }
     val autoQueueFlow = remember(ctx.applicationContext) { TerminalPreferences.clientAutoQueue(ctx.applicationContext) }
     val savedAutoQueue by autoQueueFlow.collectAsState(initial = null)
@@ -273,7 +273,7 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                             playlist = state.mode == "ytpl",
                             queueRest = autoQueue ?: true,
                             onAdd = { adding = it },
-                            onDownload = { kind -> downloading = item to kind }
+                            onDownload = { kind, picked -> downloading = kind to picked }
                         )
                     }
                 }
@@ -325,15 +325,11 @@ fun ClientScreen(modifier: Modifier = Modifier) {
             onDismiss = { adding = null }
         )
     }
-    downloading?.let { (item, kind) ->
+    downloading?.let { (kind, item) ->
         FormatDialog(
             ytid = item.id,
             title = item.title,
             kind = kind,
-            onStarted = {
-                downloading = null
-                select(Section.DOWNLOADS)
-            },
             onDismiss = { downloading = null }
         )
     }
@@ -401,7 +397,7 @@ private fun ResultRow(
     playlist: Boolean,
     queueRest: Boolean,
     onAdd: (Int) -> Unit,
-    onDownload: (String) -> Unit
+    onDownload: (String, ClientItem) -> Unit
 ) {
     var menu by remember { mutableStateOf(false) }
     val titleStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = FG)
@@ -460,14 +456,14 @@ private fun ResultRow(
                         text = { Text(stringResource(R.string.client_download_audio)) },
                         onClick = {
                             menu = false
-                            onDownload("audio")
+                            onDownload("audio", item)
                         }
                     )
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.client_download_video)) },
                         onClick = {
                             menu = false
-                            onDownload("video")
+                            onDownload("video", item)
                         }
                     )
                     DropdownMenuItem(

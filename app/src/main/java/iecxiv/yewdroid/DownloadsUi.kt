@@ -1,5 +1,6 @@
 package iecxiv.yewdroid
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -15,12 +16,15 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -28,89 +32,140 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.json.JSONArray
 import org.json.JSONObject
-import java.util.Locale
 
 private val FG = Color(0xFFDCDFE4)
 private val ACCENT = Color(0xFF98C379)
 private val MUTED = Color(0xFF7F848E)
 private val ERROR = Color(0xFFE06C75)
 
-/** One entry of the download queue, as reported by android_downloads.py. */
+/** One entry of the download queue, as reported by yt_downloads.py. */
 data class DownloadJob(
     val id: Int,
     val title: String,
     val kind: String,
     val label: String,
-    val status: String,
+    val state: String,
     val stage: String,
-    val progress: Float,
-    val message: String
+    val percent: Float,
+    val detail: String
 )
 
-data class DownloadsState(val items: List<DownloadJob> = emptyList())
+/** A format the user can pick before downloading. */
+data class FormatOption(val id: String, val label: String, val size: Long)
 
-/** A quality the user can pick: [id] is a format id (audio) or a maximum height (video). */
-data class FormatOption(val id: String, val label: String, val size: Long, val recommended: Boolean)
+data class DownloadFormats(val audio: List<FormatOption>, val video: List<FormatOption>)
 
-data class FormatList(val audio: List<FormatOption>, val video: List<FormatOption>)
-
-fun parseDownloadsState(json: String): DownloadsState {
+internal fun parseDownloads(json: String): List<DownloadJob> {
     val array = JSONObject(json).getJSONArray("items")
-    return DownloadsState(List(array.length()) { index ->
-        val item = array.getJSONObject(index)
+    return List(array.length()) { index ->
+        val o = array.getJSONObject(index)
         DownloadJob(
-            id = item.getInt("id"),
-            title = item.optString("title"),
-            kind = item.optString("kind"),
-            label = item.optString("label"),
-            status = item.optString("status"),
-            stage = item.optString("stage"),
-            progress = item.optDouble("progress", 0.0).toFloat(),
-            message = item.optString("message")
+            id = o.getInt("id"),
+            title = o.optString("title"),
+            kind = o.optString("kind"),
+            label = o.optString("label"),
+            state = o.optString("state"),
+            stage = o.optString("stage"),
+            percent = o.optDouble("percent", -1.0).toFloat(),
+            detail = o.optString("detail")
         )
-    })
-}
-
-fun parseFormatList(json: String): FormatList {
-    val root = JSONObject(json)
-    fun options(key: String): List<FormatOption> {
-        val array = root.getJSONArray(key)
-        return List(array.length()) { index ->
-            val item = array.getJSONObject(index)
-            FormatOption(
-                id = item.getString("id"),
-                label = item.getString("label"),
-                size = item.optLong("size", 0L),
-                recommended = item.optBoolean("recommended", false)
-            )
-        }
     }
-    return FormatList(options("audio"), options("video"))
 }
 
-private fun formatSize(bytes: Long): String = when {
-    bytes >= 1_000_000_000L -> String.format(Locale.getDefault(), "%.1f GB", bytes / 1e9)
-    bytes >= 1_000_000L -> String.format(Locale.getDefault(), "%.0f MB", bytes / 1e6)
-    else -> String.format(Locale.getDefault(), "%.0f KB", bytes / 1e3)
+private fun parseOptions(array: JSONArray): List<FormatOption> = List(array.length()) { index ->
+    val o = array.getJSONObject(index)
+    FormatOption(o.getString("id"), o.optString("label"), o.optLong("size", 0L))
 }
 
+internal fun parseFormats(json: String): DownloadFormats {
+    val root = JSONObject(json)
+    return DownloadFormats(parseOptions(root.getJSONArray("audio")), parseOptions(root.getJSONArray("video")))
+}
+
+private fun formatSize(bytes: Long): String = "%.1f MB".format(bytes / 1_048_576.0)
+
+/** Dialog that lists the available formats of a video and queues the chosen download. */
 @Composable
-private fun stageText(stage: String): String = when (stage) {
-    "video" -> stringResource(R.string.downloads_stage_video)
-    "audio" -> stringResource(R.string.downloads_stage_audio)
-    "merge" -> stringResource(R.string.downloads_stage_merge)
-    "export" -> stringResource(R.string.downloads_stage_export)
-    else -> stringResource(R.string.downloads_status_queued)
+fun FormatDialog(ytid: String, title: String, kind: String, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    var result by remember { mutableStateOf<Result<DownloadFormats>?>(null) }
+    var selected by remember { mutableStateOf(0) }
+    LaunchedEffect(ytid) { result = TerminalHub.loadFormats(ytid) }
+    val loaded = result
+    val options = loaded?.getOrNull()?.let { if (kind == "audio") it.audio else it.video }.orEmpty()
+    val small = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = MUTED)
+    val body = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp, color = FG)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF1B1B1B),
+        titleContentColor = FG,
+        textContentColor = FG,
+        title = { Text(stringResource(R.string.download_formats_title), fontSize = 16.sp) },
+        text = {
+            Column {
+                Text(title, style = small, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(12.dp))
+                when {
+                    loaded == null -> Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(Modifier.size(20.dp), color = ACCENT, strokeWidth = 2.dp)
+                        Spacer(Modifier.width(12.dp))
+                        Text(stringResource(R.string.download_formats_loading), style = body)
+                    }
+                    loaded.isFailure -> Text(
+                        stringResource(R.string.download_formats_failed, loaded.exceptionOrNull()?.message.orEmpty().lineSequence().firstOrNull().orEmpty()),
+                        style = body.copy(color = ERROR)
+                    )
+                    options.isEmpty() -> Text(stringResource(R.string.download_formats_empty), style = body)
+                    else -> Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState())) {
+                        options.forEachIndexed { index, option ->
+                            Row(
+                                Modifier.fillMaxWidth().clickable { selected = index }.padding(vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = selected == index,
+                                    onClick = { selected = index },
+                                    colors = RadioButtonDefaults.colors(selectedColor = ACCENT, unselectedColor = MUTED)
+                                )
+                                Text(
+                                    option.label + if (option.size > 0) " \u00b7 " + formatSize(option.size) else "",
+                                    style = body
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = options.isNotEmpty(),
+                colors = ButtonDefaults.textButtonColors(contentColor = ACCENT),
+                onClick = {
+                    val option = options[selected.coerceIn(0, options.lastIndex)]
+                    TerminalHub.enqueueDownload(ytid, title, kind, option.id, option.label)
+                    Toast.makeText(ctx, R.string.download_queued, Toast.LENGTH_SHORT).show()
+                    onDismiss()
+                }
+            ) { Text(stringResource(R.string.download_start)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, colors = ButtonDefaults.textButtonColors(contentColor = FG)) {
+                Text(stringResource(R.string.dialog_cancel))
+            }
+        }
+    )
 }
 
-/** The Downloads tab: the queue with progress, and cancel / clear buttons. */
+/** The Downloads tab: progress and result of every queued download. */
 @Composable
 fun DownloadsScreen(modifier: Modifier = Modifier) {
-    val state by TerminalHub.downloads.collectAsState()
+    val jobs by TerminalHub.downloads.collectAsState()
     val small = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = MUTED)
     Column(modifier) {
-        if (state.items.any { it.status == "done" || it.status == "error" || it.status == "cancelled" }) {
+        if (jobs.any { it.state != "queued" && it.state != "running" }) {
             Row(Modifier.fillMaxWidth().padding(end = 4.dp), horizontalArrangement = Arrangement.End) {
                 TextButton(
                     onClick = { TerminalHub.clearFinishedDownloads() },
@@ -118,13 +173,13 @@ fun DownloadsScreen(modifier: Modifier = Modifier) {
                 ) { Text(stringResource(R.string.downloads_clear), fontSize = 12.sp) }
             }
         }
-        if (state.items.isEmpty()) {
+        if (jobs.isEmpty()) {
             Box(Modifier.weight(1f).fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
                 Text(stringResource(R.string.downloads_empty), style = small.copy(textAlign = TextAlign.Center))
             }
         } else {
             LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
-                items(state.items.asReversed(), key = { it.id }) { job -> DownloadRow(job) }
+                items(jobs.asReversed(), key = { it.id }) { job -> DownloadRow(job) }
             }
         }
     }
@@ -134,132 +189,53 @@ fun DownloadsScreen(modifier: Modifier = Modifier) {
 private fun DownloadRow(job: DownloadJob) {
     val titleStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = FG)
     val small = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = MUTED)
-    val kind = stringResource(if (job.kind == "video") R.string.downloads_kind_video else R.string.downloads_kind_audio)
+    val active = job.state == "queued" || job.state == "running"
+    val status = stringResource(
+        when (job.state) {
+            "queued" -> R.string.download_state_queued
+            "done" -> R.string.download_state_done
+            "error" -> R.string.download_state_error
+            "cancelled" -> R.string.download_state_cancelled
+            else -> when (job.stage) {
+                "video" -> R.string.download_stage_video
+                "audio" -> R.string.download_stage_audio
+                "merge" -> R.string.download_stage_merge
+                "export" -> R.string.download_stage_export
+                else -> R.string.download_stage_starting
+            }
+        }
+    )
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(job.title, style = titleStyle, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(
-                    if (job.label.isNotEmpty()) "$kind \u00b7 ${job.label}" else kind,
-                    style = small
+                    listOf(job.label, status).filter { it.isNotEmpty() }.joinToString(" \u00b7 "),
+                    style = small.copy(color = if (job.state == "error") ERROR else if (job.state == "done") ACCENT else MUTED)
                 )
             }
-            if (job.status == "queued" || job.status == "running") {
+            if (active) {
                 IconButton(onClick = { TerminalHub.cancelDownload(job.id) }) {
-                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.downloads_cancel), tint = FG)
+                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.download_cancel), tint = FG)
                 }
             }
         }
-        when (job.status) {
-            "running" -> {
+        if (job.state == "running") {
+            Spacer(Modifier.height(4.dp))
+            if (job.percent >= 0f) {
                 LinearProgressIndicator(
-                    progress = (job.progress / 100f).coerceIn(0f, 1f),
-                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                    progress = (job.percent / 100f).coerceIn(0f, 1f),
+                    modifier = Modifier.fillMaxWidth(),
                     color = ACCENT,
                     trackColor = Color(0xFF2A2A2A)
                 )
-                Text(
-                    "${stageText(job.stage)} \u00b7 ${job.progress.toInt()}%",
-                    style = small.copy(color = ACCENT),
-                    modifier = Modifier.padding(top = 2.dp)
-                )
+            } else {
+                LinearProgressIndicator(Modifier.fillMaxWidth(), color = ACCENT, trackColor = Color(0xFF2A2A2A))
             }
-            "queued" -> Text(stringResource(R.string.downloads_status_queued), style = small)
-            "done" -> Text(
-                stringResource(R.string.downloads_done),
-                style = small.copy(color = ACCENT)
-            )
-            "cancelled" -> Text(stringResource(R.string.downloads_cancelled), style = small)
-            else -> Text(
-                stringResource(R.string.downloads_error) +
-                    if (job.message.isNotEmpty()) ": ${job.message}" else "",
-                style = small.copy(color = ERROR),
-                maxLines = 4,
-                overflow = TextOverflow.Ellipsis
-            )
+        }
+        if (job.detail.isNotEmpty() && (job.state == "done" || job.state == "error")) {
+            Text(job.detail, style = small, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
         }
     }
-}
-
-/** Lists the audio or video qualities of a video and queues the download of the one picked. */
-@Composable
-fun FormatDialog(
-    ytid: String,
-    title: String,
-    kind: String,
-    onStarted: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    var result by remember(ytid) { mutableStateOf<Result<FormatList>?>(null) }
-    LaunchedEffect(ytid) { result = TerminalHub.loadFormats(ytid) }
-    val audio = kind == "audio"
-    val small = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = MUTED)
-    val option = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp, color = FG)
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Color(0xFF1B1B1B),
-        titleContentColor = FG,
-        textContentColor = FG,
-        title = {
-            Text(stringResource(if (audio) R.string.downloads_format_title_audio else R.string.downloads_format_title_video))
-        },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text(title, style = small, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Spacer(Modifier.height(10.dp))
-                val loaded = result
-                when {
-                    loaded == null -> Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(Modifier.size(18.dp), color = ACCENT, strokeWidth = 2.dp)
-                        Spacer(Modifier.width(10.dp))
-                        Text(stringResource(R.string.downloads_format_loading), style = small)
-                    }
-                    loaded.isFailure -> Text(
-                        stringResource(
-                            R.string.downloads_format_error,
-                            loaded.exceptionOrNull()?.message.orEmpty()
-                                .lineSequence().firstOrNull { it.isNotBlank() }.orEmpty()
-                        ),
-                        style = small.copy(color = ERROR)
-                    )
-                    else -> {
-                        val list = loaded.getOrThrow().let { if (audio) it.audio else it.video }
-                        if (list.isEmpty()) {
-                            Text(stringResource(R.string.downloads_format_none), style = small)
-                        } else {
-                            list.asReversed().forEach { entry ->
-                                val detail = buildString {
-                                    if (entry.size > 0) append(" \u00b7 ~").append(formatSize(entry.size))
-                                }
-                                Row(
-                                    Modifier.fillMaxWidth()
-                                        .clickable {
-                                            TerminalHub.enqueueDownload(ytid, title, kind, entry.id, entry.label)
-                                            onStarted()
-                                        }
-                                        .padding(vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(entry.label + detail, style = option, modifier = Modifier.weight(1f))
-                                    if (entry.recommended) {
-                                        Text(
-                                            stringResource(R.string.downloads_recommended),
-                                            style = small.copy(color = ACCENT),
-                                            modifier = Modifier.padding(start = 8.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss, colors = ButtonDefaults.textButtonColors(contentColor = ACCENT)) {
-                Text(stringResource(R.string.downloads_cancel))
-            }
-        }
-    )
+    Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF1F1F1F)))
 }
