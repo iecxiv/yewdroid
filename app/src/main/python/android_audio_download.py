@@ -17,7 +17,8 @@ def _clean(message):
 def download_audio(ytid, folder, publish, format_id=None, tracker=None, clients=None):
     """Downloads the audio of a video. `format_id` picks a specific audio format; `tracker`
     (android_dl_common.Progress) receives progress and can cancel; `clients` forces YouTube
-    player clients."""
+    player clients. `publish(path)` converts and/or exports the file and returns its destination;
+    with a tracker it is responsible for reporting the encode and export stages."""
     import yt_dlp
     folder = os.path.abspath(folder)
     os.makedirs(folder, exist_ok=True)
@@ -103,8 +104,6 @@ def download_audio(ytid, folder, publish, format_id=None, tracker=None, clients=
         if not os.path.isfile(path) or os.path.getsize(path) == 0:
             raise RuntimeError("Audio file is missing or empty")
         say("\n[audio] Exporting finished file...")
-        if tracker is not None:
-            tracker.stage("export")
         destination = publish(path)
         if not isinstance(destination, str) or not destination:
             raise RuntimeError("The export did not confirm the destination")
