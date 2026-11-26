@@ -3,7 +3,8 @@ import importlib
 import re
 import threading
 
-_ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+# yewtube defines its underline as "\x1b[2m\x1b[4m\x1b[%33m" (a malformed final sequence), so '%' is accepted.
+_ANSI = re.compile(r"\x1b\[[0-9;?%]*[A-Za-z]")
 _ERASE = re.compile(r"(?:\x1b\[[0-9]*K)+$")
 _SPLIT = re.compile(r"(\r\n|\r|\n)")
 _PLACEHOLDER = re.compile(r"(\{#\}|\{\})")

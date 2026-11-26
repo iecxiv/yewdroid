@@ -60,6 +60,8 @@ object TerminalHub {
     val positionMs = MutableStateFlow(0L)
     val durationMs = MutableStateFlow(0L)
     val translationAvailable = MutableStateFlow(false)
+    /** True once the catalogue for the chosen language has been looked up. */
+    val translationChecked = MutableStateFlow(false)
     val translated = MutableStateFlow(false)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -70,8 +72,8 @@ object TerminalHub {
     @Volatile private var exo: ExoPlayer? = null
     @Volatile private var nextVideo = false
     @Volatile private var appContext: Context? = null
+    @Volatile private var started = false
     private var surface: SurfaceView? = null
-    private var started = false
     private val sink = HubSink()
 
     private val listener = object : Player.Listener {
@@ -92,6 +94,9 @@ object TerminalHub {
 
     private fun text(id: Int, vararg args: Any, fallback: String): String =
         appContext?.getString(id, *args) ?: fallback
+
+    private fun tagFor(choice: String): String =
+        if (choice == "system") Locale.getDefault().toLanguageTag() else choice
 
     fun registerPlayer(p: ExoPlayer) {
         exo = p
@@ -126,12 +131,14 @@ object TerminalHub {
             val m = Python.getInstance().getModule("yt_term")
             Python.getInstance().getModule("terminal_layout").callAttr("install", m)
             val enabled = runCatching { TerminalPreferences.translateOutput(app).first() }.getOrDefault(false)
+            val choice = runCatching { TerminalPreferences.terminalLanguage(app).first() }.getOrDefault("system")
             val available = runCatching {
                 val i18n = Python.getInstance().getModule("android_i18n")
                 i18n.callAttr("install", m)
-                i18n.callAttr("configure", Locale.getDefault().toLanguageTag(), enabled).toBoolean()
+                i18n.callAttr("configure", tagFor(choice), enabled).toBoolean()
             }.getOrDefault(false)
             translationAvailable.value = available
+            translationChecked.value = true
             translated.value = enabled && available
             py = m
             val initial = sizes.tryReceive().getOrNull() ?: (cols to rows)
@@ -153,6 +160,21 @@ object TerminalHub {
         scope.launch {
             runCatching {
                 Python.getInstance().getModule("android_i18n").callAttr("set_enabled", on)
+                py?.callAttr("request_redraw")
+            }
+        }
+    }
+
+    /** Chooses the language terminal output is translated to: "system" or a language code. */
+    fun setLanguage(ctx: Context, choice: String) {
+        TerminalPreferences.saveTerminalLanguage(ctx, choice)
+        if (!started) return
+        scope.launch {
+            runCatching {
+                val i18n = Python.getInstance().getModule("android_i18n")
+                val available = i18n.callAttr("configure", tagFor(choice), translated.value).toBoolean()
+                translationAvailable.value = available
+                translationChecked.value = true
                 py?.callAttr("request_redraw")
             }
         }

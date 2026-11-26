@@ -9,6 +9,11 @@
     <string name="settings_open_system">Abrir los ajustes del sistema de la app</string>
     <string name="permission_allowed">Permitido</string>
     <string name="permission_allow">Permitir</string>
+    <string name="language_section">Idioma de la terminal</string>
+    <string name="language_section_desc">Idioma al que se traduce la salida de la terminal</string>
+    <string name="language_system">Sistema</string>
+    <string name="language_spanish">Español</string>
+    <string name="language_unavailable">No hay traducción para el idioma seleccionado.</string>
     <string name="main_loading">Cargando la terminal...</string>
     <string name="main_terminal">Terminal</string>
     <string name="main_client_placeholder">El cliente interactivo llegará pronto.\nActiva Terminal para usar yewtube.</string>
@@ -21,6 +26,7 @@
     <string name="pref_mode_save_failed">[ajustes] No se pudo guardar el modo.</string>
     <string name="pref_language_save_failed">[ajustes] No se pudo guardar el idioma de la salida.</string>
     <string name="pref_header_save_failed">[ajustes] No se pudo guardar el estado de la cabecera.</string>
+    <string name="pref_terminal_language_save_failed">[ajustes] No se pudo guardar el idioma de la terminal.</string>
     <string name="terminal_resize_failed">[terminal] No se pudo actualizar el tamaño: %1$s</string>
     <string name="player_unavailable">[reproductor] el servicio de reproducción no está disponible</string>
 </resources>

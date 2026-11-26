@@ -9,6 +9,11 @@
     <string name="settings_open_system">Open system app settings</string>
     <string name="permission_allowed">Allowed</string>
     <string name="permission_allow">Allow</string>
+    <string name="language_section">Terminal language</string>
+    <string name="language_section_desc">Language the terminal output is translated to</string>
+    <string name="language_system">System</string>
+    <string name="language_spanish">Español</string>
+    <string name="language_unavailable">No translation is available for the selected language.</string>
     <string name="main_loading">Loading terminal...</string>
     <string name="main_terminal">Terminal</string>
     <string name="main_client_placeholder">Interactive client coming soon.\nSwitch Terminal on to use yewtube.</string>
@@ -21,6 +26,7 @@
     <string name="pref_mode_save_failed">[settings] Could not save the mode.</string>
     <string name="pref_language_save_failed">[settings] Could not save the output language.</string>
     <string name="pref_header_save_failed">[settings] Could not save the header state.</string>
+    <string name="pref_terminal_language_save_failed">[settings] Could not save the terminal language.</string>
     <string name="terminal_resize_failed">[terminal] Could not update the size: %1$s</string>
     <string name="player_unavailable">[player] playback service unavailable</string>
 </resources>

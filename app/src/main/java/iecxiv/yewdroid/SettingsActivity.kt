@@ -19,12 +19,15 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -33,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -42,6 +46,12 @@ import androidx.core.app.NotificationManagerCompat
 private val BG = Color(0xFF0C0C0C)
 private val FG = Color(0xFFDCDFE4)
 private val ACCENT = Color(0xFF98C379)
+
+/** Output language choices: the stored value and its label. Add a row here when a catalogue is added. */
+private val LANGUAGE_OPTIONS = listOf(
+    "system" to R.string.language_system,
+    "es" to R.string.language_spanish
+)
 
 class SettingsActivity : ComponentActivity() {
     private var resumes by mutableIntStateOf(0)
@@ -88,6 +98,12 @@ private fun SettingsScreen(resumes: Int, onBack: () -> Unit) {
     val batteryAllowed = remember(resumes, changes) {
         ctx.getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(ctx.packageName) == true
     }
+    val languageFlow = remember(ctx.applicationContext) { TerminalPreferences.terminalLanguage(ctx.applicationContext) }
+    val savedLanguage by languageFlow.collectAsState(initial = null)
+    var pickedLanguage by remember { mutableStateOf<String?>(null) }
+    val language = pickedLanguage ?: savedLanguage
+    val translationAvailable by TerminalHub.translationAvailable.collectAsState()
+    val translationChecked by TerminalHub.translationChecked.collectAsState()
     val notificationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         changes++
         val activity = ctx.findActivity()
@@ -116,6 +132,7 @@ private fun SettingsScreen(resumes: Int, onBack: () -> Unit) {
 
     val title = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 20.sp, color = ACCENT)
     val section = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp, color = ACCENT)
+    val hint = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = Color.Gray)
     Column(Modifier.fillMaxSize().background(BG).systemBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = FG) }
@@ -137,7 +154,43 @@ private fun SettingsScreen(resumes: Int, onBack: () -> Unit) {
                 onClick = { openFirst(ctx, appDetails(ctx)) },
                 colors = ButtonDefaults.textButtonColors(contentColor = ACCENT)
             ) { Text(stringResource(R.string.settings_open_system)) }
+
+            Text(
+                stringResource(R.string.language_section), style = section,
+                modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
+            )
+            Text(stringResource(R.string.language_section_desc), style = hint)
+            if (language != null) {
+                LANGUAGE_OPTIONS.forEach { (value, label) ->
+                    LanguageRow(stringResource(label), language == value) {
+                        pickedLanguage = value
+                        TerminalHub.setLanguage(ctx, value)
+                    }
+                }
+                if (translationChecked && !translationAvailable) {
+                    Text(stringResource(R.string.language_unavailable), style = hint, modifier = Modifier.padding(top = 4.dp))
+                }
+            }
         }
+    }
+}
+
+@Composable
+private fun LanguageRow(label: String, selected: Boolean, onSelect: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth()
+            .selectable(selected = selected, onClick = onSelect, role = Role.RadioButton)
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(
+            selected = selected, onClick = null,
+            colors = RadioButtonDefaults.colors(selectedColor = ACCENT, unselectedColor = FG)
+        )
+        Text(
+            label, modifier = Modifier.padding(start = 8.dp),
+            style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 15.sp, color = FG)
+        )
     }
 }
 
