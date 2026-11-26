@@ -7,34 +7,27 @@ import re
 import shutil
 import tempfile
 
+from android_dl_common import Cancelled, say
+
 
 def _clean(message):
     return re.sub(r"https?://\S+", "<URL>", str(message))
 
 
-def was_cancelled(error):
-    """True when the error (or its cause) is the download queue's cancellation."""
-    for _ in range(8):
-        if error is None:
-            return False
-        if type(error).__name__ == "Cancelled":
-            return True
-        error = error.__cause__ or error.__context__
-    return False
-
-
-def download_audio(ytid, folder, publish, format_id=None, report=None):
+def download_audio(ytid, folder, publish, format_id=None, tracker=None):
+    """Downloads the audio of a video. `format_id` picks a specific audio format; `tracker`
+    (android_dl_common.Progress) receives progress and can cancel."""
     import yt_dlp
     folder = os.path.abspath(folder)
     os.makedirs(folder, exist_ok=True)
     work = tempfile.mkdtemp(prefix=".yewdroid-audio-", dir=folder)
     warnings = deque(maxlen=20)
-    report_data = {"video_id": str(ytid), "formats": []}
+    report = {"video_id": str(ytid), "formats": []}
     for package in ("yt-dlp", "yt-dlp-ejs"):
         try:
-            report_data[package] = metadata.version(package)
+            report[package] = metadata.version(package)
         except metadata.PackageNotFoundError:
-            report_data[package] = "not found"
+            report[package] = "not found"
 
     class Logger:
         def debug(self, message):
@@ -43,14 +36,14 @@ def download_audio(ytid, folder, publish, format_id=None, report=None):
         def warning(self, message):
             text = _clean(message)
             warnings.append(text)
-            print("[yt-dlp] " + text)
+            say("[yt-dlp] " + text)
 
         def error(self, message):
             warnings.append(_clean(message))
 
     def select(ctx):
         formats = ctx.get("formats") or []
-        report_data["formats"] = [{key: fmt.get(key) for key in (
+        report["formats"] = [{key: fmt.get(key) for key in (
             "format_id", "ext", "protocol", "acodec", "vcodec", "has_drm")}
             | {"has_url": bool(fmt.get("url"))} for fmt in formats[-100:]]
         audio = [fmt for fmt in formats if fmt.get("vcodec") == "none"
@@ -58,24 +51,24 @@ def download_audio(ytid, folder, publish, format_id=None, report=None):
                  and fmt.get("url") and not fmt.get("has_drm")]
         preferred = [fmt for fmt in audio if fmt.get("ext") == "m4a"]
         candidates = preferred or audio
+        if format_id:
+            candidates = [fmt for fmt in audio
+                          if str(fmt.get("format_id")) == str(format_id)] or candidates
         if not candidates:
             raise RuntimeError("No downloadable audio track in this extraction")
-        chosen = None
-        if format_id:
-            chosen = next((fmt for fmt in audio if str(fmt.get("format_id")) == str(format_id)), None)
-        if chosen is None:
-            chosen = candidates[-1]
-        report_data["selected_format"] = chosen.get("format_id")
-        print("[audio] Format %s (%s)" % (chosen.get("format_id"), chosen.get("ext")))
+        chosen = candidates[-1]
+        report["selected_format"] = chosen.get("format_id")
+        say("[audio] Format %s (%s)" % (chosen.get("format_id"), chosen.get("ext")))
         yield chosen
 
-    def progress(data):
-        if report is not None:
-            report("audio", data)
+    def on_progress(data):
         if data.get("status") == "downloading":
             total = data.get("total_bytes") or data.get("total_bytes_estimate") or 0
             if total:
-                print("\r  Audio %.1f%%" % (100.0 * data.get("downloaded_bytes", 0) / total), end="", flush=True)
+                fraction = data.get("downloaded_bytes", 0) / total
+                say("\r  Audio %.1f%%" % (100.0 * fraction), end="", flush=True)
+                if tracker is not None:
+                    tracker.stage("download", fraction)
 
     options = {
         "format": select,
@@ -84,7 +77,7 @@ def download_audio(ytid, folder, publish, format_id=None, report=None):
         "quiet": True,
         "no_warnings": False,
         "logger": Logger(),
-        "progress_hooks": [progress],
+        "progress_hooks": [on_progress],
         "postprocessors": [],
         "fixup": "never",
         "hls_prefer_native": True,
@@ -96,7 +89,7 @@ def download_audio(ytid, folder, publish, format_id=None, report=None):
     }
     try:
         with yt_dlp.YoutubeDL(options) as ydl:
-            report_data["js_runtimes"] = list((ydl.params.get("js_runtimes") or {}).keys())
+            report["js_runtimes"] = list((ydl.params.get("js_runtimes") or {}).keys())
             info = ydl.extract_info("https://www.youtube.com/watch?v=%s" % ytid, download=True)
             if not info or info.get("vcodec") != "none" or info.get("acodec") in (None, "none"):
                 raise RuntimeError("The result is not an audio-only track")
@@ -107,22 +100,22 @@ def download_audio(ytid, folder, publish, format_id=None, report=None):
             raise RuntimeError("Unexpected audio path")
         if not os.path.isfile(path) or os.path.getsize(path) == 0:
             raise RuntimeError("Audio file is missing or empty")
-        print("\n[audio] Exporting finished file...")
-        if report is not None:
-            report("export", None)
+        say("\n[audio] Exporting finished file...")
+        if tracker is not None:
+            tracker.stage("export")
         destination = publish(path)
         if not isinstance(destination, str) or not destination:
             raise RuntimeError("The export did not confirm the destination")
     except BaseException as error:
-        if was_cancelled(error):
+        if tracker is not None and tracker.cancelled:
             shutil.rmtree(work, ignore_errors=True)
-            raise
-        report_data["error"] = _clean(error)
-        report_data["warnings"] = list(warnings)
+            raise Cancelled() from None
+        report["error"] = _clean(error)
+        report["warnings"] = list(warnings)
         diagnostic = os.path.join(work, "diagnostic.json")
         try:
             with open(diagnostic, "w", encoding="utf-8") as handle:
-                json.dump(report_data, handle, ensure_ascii=False, indent=2)
+                json.dump(report, handle, ensure_ascii=False, indent=2)
         except OSError:
             diagnostic = "Could not write the diagnostic"
         message = "%s\nFiles kept: %s\nDiagnostic: %s" % (_clean(error), work, diagnostic)
@@ -130,10 +123,10 @@ def download_audio(ytid, folder, publish, format_id=None, report=None):
             message += "\nWarnings from the same attempt:\n" + "\n".join(list(warnings)[-4:])
         if isinstance(error, Exception):
             raise RuntimeError(message) from error
-        print(message)
+        say(message)
         raise
     else:
         if destination != path:
             shutil.rmtree(work, ignore_errors=True)
-        print("Saved: %s" % destination)
+        say("Saved: %s" % destination)
         return destination

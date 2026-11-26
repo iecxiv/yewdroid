@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="dl_tab">Descargas</string>
+    <string name="dl_tab_active">Descargas (%1$d)</string>
+    <string name="dl_format_audio_title">Descargar audio</string>
+    <string name="dl_format_video_title">Descargar vídeo</string>
+    <string name="dl_format_loading">Consultando los formatos disponibles…</string>
+    <string name="dl_format_error">No se pudieron listar los formatos: %1$s</string>
+    <string name="dl_format_none">No se encontraron formatos descargables.</string>
+    <string name="dl_format_recommended">recomendado</string>
+    <string name="dl_cancel">Cancelar</string>
+    <string name="dl_cancel_download">Cancelar descarga</string>
+    <string name="dl_clear">Quitar terminadas</string>
+    <string name="dl_empty">Aún no hay descargas. Usa el menú ⋮ de un resultado.</string>
+    <string name="dl_kind_audio">Audio</string>
+    <string name="dl_kind_video">Vídeo</string>
+    <string name="dl_stage_download">Descargando</string>
+    <string name="dl_stage_video">Descargando vídeo</string>
+    <string name="dl_stage_audio">Descargando audio</string>
+    <string name="dl_stage_merge">Uniendo</string>
+    <string name="dl_stage_export">Guardando</string>
+    <string name="dl_stage_cancelling">Cancelando…</string>
+    <string name="dl_state_queued">En espera</string>
+    <string name="dl_state_done">Guardado en %1$s</string>
+    <string name="dl_state_cancelled">Cancelada</string>
+    <string name="dl_state_error">Error: %1$s</string>
+</resources>
