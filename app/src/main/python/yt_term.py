@@ -102,15 +102,10 @@ def set_background(on):
     return None
 
 
-def _yewtube():
-    """(config, g) once the session has loaded yewtube, or None before that. The app calls into this module
-    before the session starts (and every second afterwards), and importing yewtube then would fail: its
-    package needs the pip stand-in that the session installs when it starts."""
-    config = sys.modules.get("mps_youtube.config")
-    g = sys.modules.get("mps_youtube.g")
-    if config is None or g is None:
-        return None
-    return config, g
+def _loaded(name):
+    """A yewtube module only if it is already loaded. Importing one before the session has started would
+    fail (the stand-in for pip is installed when it starts), so the app's early calls must not import."""
+    return sys.modules.get("mps_youtube." + name)
 
 
 def player_event(action):
@@ -127,10 +122,9 @@ def sync_video_mode():
     """True when the "show video" setting changed and the track playing has the other kind of stream.
     The app calls it every second; it also runs while nothing plays, to keep the last value current."""
     try:
-        modules = _yewtube()
-        if modules is None:
+        config, g = _loaded("config"), _loaded("g")
+        if config is None or g is None or not hasattr(config, "SHOW_VIDEO"):
             return False
-        config, g = modules
         wanted = bool(config.SHOW_VIDEO.get)
         previous = _last_video[0]
         _last_video[0] = wanted
@@ -159,12 +153,9 @@ def set_play_mode(shuffle, repeat):
     _mode["shuffle"] = bool(shuffle)
     _mode["repeat"] = int(repeat)
     try:
-        modules = _yewtube()
-        if modules is None:
-            # The session is not up yet: the new mode is applied when the first playback starts.
-            return
-        p = getattr(modules[1], "PLAYER_OBJ", None)
-        if getattr(p, "_active", False) and hasattr(p, "apply_shuffle"):
+        g = _loaded("g")
+        p = getattr(g, "PLAYER_OBJ", None)
+        if p is not None and getattr(p, "_active", False) and hasattr(p, "apply_shuffle"):
             p.apply_shuffle(_mode["shuffle"])
     except Exception:
         traceback.print_exc(file=_orig_err)
