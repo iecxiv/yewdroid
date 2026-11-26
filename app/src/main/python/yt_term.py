@@ -215,19 +215,24 @@ def _find_qjs():
 
 
 def _patch_js_runtime():
-    """Injects js_runtimes=quickjs into every yt_dlp.YoutubeDL instance."""
+    """Injects js_runtimes=quickjs and the imported YouTube cookies (files_dir/cookies.txt, when
+    present) into every yt_dlp.YoutubeDL instance."""
     import yt_dlp
     qjs = _find_qjs()
-    if not qjs:
+    if qjs:
+        _orig_err.write("[js] quickjs: %s\n" % qjs)
+    else:
         _orig_err.write("[js] libqjs.so not found: yt-dlp has no JS runtime\n")
-        return
-    _orig_err.write("[js] quickjs: %s\n" % qjs)
     Orig = yt_dlp.YoutubeDL
 
     class YDL(Orig):
         def __init__(self, params=None, auto_init=True):
             p = dict(params or {})
-            p.setdefault("js_runtimes", {"quickjs": {"path": qjs}})
+            if qjs:
+                p.setdefault("js_runtimes", {"quickjs": {"path": qjs}})
+            cookies = os.path.join(os.environ.get("HOME", ""), "cookies.txt")
+            if os.path.isfile(cookies):
+                p.setdefault("cookiefile", cookies)
             super().__init__(p, auto_init)
 
     yt_dlp.YoutubeDL = YDL

@@ -1,5 +1,6 @@
 package iecxiv.yewdroid
 
+import android.content.Intent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -20,6 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -44,8 +46,11 @@ private fun formatSize(bytes: Long): String = when {
 /** Dialog to pick the quality of an audio or video download. */
 @Composable
 fun FormatsDialog(state: FormatsState, onPick: (FormatOption) -> Unit, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
     val small = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = MUTED)
     val body = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp, color = FG)
+    // YouTube's "Sign in to confirm you're not a bot" answer: the cookies setting may help.
+    val signInCheck = state.error.contains("not a bot", ignoreCase = true)
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Color(0xFF1B1B1B),
@@ -65,10 +70,16 @@ fun FormatsDialog(state: FormatsState, onPick: (FormatOption) -> Unit, onDismiss
                         Spacer(Modifier.width(12.dp))
                         Text(stringResource(R.string.dl_format_loading), style = body)
                     }
-                    state.error.isNotEmpty() -> Text(
-                        stringResource(R.string.dl_format_error, state.error),
-                        style = body.copy(color = ERROR)
-                    )
+                    state.error.isNotEmpty() -> Column {
+                        Text(
+                            stringResource(R.string.dl_format_error, state.error),
+                            style = body.copy(color = ERROR)
+                        )
+                        if (signInCheck) {
+                            Spacer(Modifier.height(10.dp))
+                            Text(stringResource(R.string.cookies_hint), style = small)
+                        }
+                    }
                     state.options.isEmpty() -> Text(stringResource(R.string.dl_format_none), style = body)
                     else -> LazyColumn(Modifier.heightIn(max = 320.dp)) {
                         items(state.options, key = { it.id }) { option ->
@@ -89,7 +100,17 @@ fun FormatsDialog(state: FormatsState, onPick: (FormatOption) -> Unit, onDismiss
                 }
             }
         },
-        confirmButton = {},
+        confirmButton = {
+            if (signInCheck) {
+                TextButton(
+                    onClick = {
+                        onDismiss()
+                        ctx.startActivity(Intent(ctx, SettingsActivity::class.java))
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = ACCENT)
+                ) { Text(stringResource(R.string.cookies_open_settings)) }
+            }
+        },
         dismissButton = {
             TextButton(onClick = onDismiss, colors = ButtonDefaults.textButtonColors(contentColor = ACCENT)) {
                 Text(stringResource(R.string.dl_cancel))

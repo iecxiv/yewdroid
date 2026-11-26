@@ -7,8 +7,8 @@ import threading
 import time
 import traceback
 
-from android_dl_common import (CLIENTS, FALLBACK_CLIENTS, QUIET, Cancelled, Progress, is_bot_check,
-                               plain)
+from android_dl_common import (FALLBACK_CLIENTS, QUIET, Cancelled, Progress, is_bot_error,
+                               plain, youtube_opts)
 
 _lock = threading.RLock()
 _jobs = []
@@ -57,21 +57,17 @@ def _size(fmt):
 def _extract(ytid):
     """Format info for a video; retries with other YouTube clients on the sign-in check."""
     import yt_dlp
-    order = [CLIENTS[0]] + [c for c in (None,) + FALLBACK_CLIENTS if c != CLIENTS[0]]
     last = None
-    for client in order:
+    for clients in FALLBACK_CLIENTS:
         options = {"quiet": True, "no_warnings": True, "noplaylist": True, "logger": _Silent()}
-        if client:
-            options["extractor_args"] = {"youtube": {"player_client": list(client)}}
+        options.update(youtube_opts(clients))
         try:
             with yt_dlp.YoutubeDL(options) as ydl:
-                info = ydl.extract_info("https://www.youtube.com/watch?v=%s" % ytid, download=False)
-            CLIENTS[0] = client
-            return info
+                return ydl.extract_info("https://www.youtube.com/watch?v=%s" % ytid, download=False)
         except Exception as error:
             last = error
-            if not is_bot_check(error):
-                raise
+            if not is_bot_error(error):
+                break
     raise last
 
 
@@ -149,6 +145,17 @@ def _find(job_id):
         return next((job for job in _jobs if job["id"] == job_id), None)
 
 
+def _download(job, tracker, clients):
+    from mps_youtube import config
+    folder = config.DDIR.get
+    if job["kind"] == "audio":
+        from android_audio_download import download_audio
+        from android_video_download import _publish
+        return download_audio(job["ytid"], folder, _publish, job["format_id"], tracker, clients)
+    from android_video_download import download_video
+    return download_video(job["ytid"], folder, lambda data: None, job["format_id"], tracker, clients)
+
+
 def _run(job):
     weights = _WEIGHTS[job["kind"]]
 
@@ -163,16 +170,17 @@ def _run(job):
     _trackers[job["id"]] = tracker
     QUIET.on = True
     try:
-        from mps_youtube import config
-        folder = config.DDIR.get
-        if job["kind"] == "audio":
-            from android_audio_download import download_audio
-            from android_video_download import _publish
-            destination = download_audio(job["ytid"], folder, _publish, job["format_id"], tracker)
-        else:
-            from android_video_download import download_video
-            destination = download_video(job["ytid"], folder, lambda data: None,
-                                         job["format_id"], tracker)
+        destination = None
+        for index, clients in enumerate(FALLBACK_CLIENTS):
+            try:
+                destination = _download(job, tracker, clients)
+                break
+            except BaseException as error:
+                last_try = index == len(FALLBACK_CLIENTS) - 1
+                if tracker.cancelled or isinstance(error, Cancelled) or not is_bot_error(error) or last_try:
+                    raise
+                with _lock:
+                    job.update(stage="", percent=0.0)
         with _lock:
             job.update(state="done", percent=100.0, stage="", path=str(destination or ""))
     except BaseException as error:

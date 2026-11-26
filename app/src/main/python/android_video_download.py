@@ -4,7 +4,7 @@ import shutil
 import sys
 import tempfile
 
-from android_dl_common import Cancelled, extractor_options, say
+from android_dl_common import Cancelled, is_bot_error, say, youtube_opts
 
 
 def _publish(path):
@@ -16,9 +16,10 @@ def _publish(path):
     return str(jclass("iecxiv.yewdroid.DownloadPublisher").publish(app, path))
 
 
-def download_video(ytid, folder, hook, format_id=None, tracker=None):
+def download_video(ytid, folder, hook, format_id=None, tracker=None, clients=None):
     """Downloads video + audio and muxes them. `format_id` picks a specific video format;
-    `tracker` (android_dl_common.Progress) receives progress and can cancel."""
+    `tracker` (android_dl_common.Progress) receives progress and can cancel; `clients` forces
+    YouTube player clients."""
     import yt_dlp
     from java import jclass
     from yt_dlp.utils import sanitize_filename
@@ -28,6 +29,7 @@ def download_video(ytid, folder, hook, format_id=None, tracker=None):
     muxer = jclass("iecxiv.yewdroid.Mp4Muxer")
     work = tempfile.mkdtemp(prefix=".yewdroid-video-", dir=folder)
     url = "https://www.youtube.com/watch?v=%s" % ytid
+    default_video = "bv[ext=mp4][vcodec^=avc1]"
     try:
         def fetch(label, selector):
             say("\n[download] %s" % label)
@@ -51,8 +53,8 @@ def download_video(ytid, folder, hook, format_id=None, tracker=None):
                 "postprocessors": [],
                 "match_filter": lambda info, *, incomplete=False: (
                     "Live streams are not supported" if info.get("is_live") else None),
-                **extractor_options(),
             }
+            opts.update(youtube_opts(clients))
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=True)
                 if not info:
@@ -62,7 +64,9 @@ def download_video(ytid, folder, hook, format_id=None, tracker=None):
                 raise RuntimeError("Incomplete track: %s" % label)
             return info, path
 
-        vi, video = fetch("video", str(format_id) if format_id else "bv[ext=mp4][vcodec^=avc1]")
+        # A chosen format id may not exist for another player client: fall back to the default pick.
+        video_selector = ("%s/%s" % (format_id, default_video)) if format_id else default_video
+        vi, video = fetch("video", video_selector)
         _, audio = fetch("audio", "ba[ext=m4a][acodec^=mp4a]")
         title = sanitize_filename(str(vi.get("title") or "video"), restricted=False)[:120]
         safe_id = sanitize_filename(str(ytid), restricted=True)[:32]
@@ -88,6 +92,10 @@ def download_video(ytid, folder, hook, format_id=None, tracker=None):
         if tracker is not None and tracker.cancelled:
             shutil.rmtree(work, ignore_errors=True)
             raise Cancelled() from None
+        if is_bot_error(exc):
+            # Nothing was downloaded: the caller may retry with another player client.
+            shutil.rmtree(work, ignore_errors=True)
+            raise
         message = "Video download/export interrupted. Files kept in: %s" % work
         say(message)
         if isinstance(exc, Exception):

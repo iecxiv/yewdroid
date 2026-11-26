@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cookies_section">Cookies de YouTube</string>
+    <string name="cookies_desc">Opcional. Un cookies.txt exportado de un navegador donde hayas iniciado sesión en YouTube. Puede ayudar cuando YouTube pide confirmar que no eres un robot. Usa una cuenta secundaria: el uso automatizado puede limitar una cuenta. El archivo queda privado en esta app.</string>
+    <string name="cookies_on">Cookies importadas</string>
+    <string name="cookies_off">Sin cookies importadas</string>
+    <string name="cookies_import">Importar cookies.txt</string>
+    <string name="cookies_remove">Quitar cookies</string>
+    <string name="cookies_invalid">Ese archivo no parece un cookies.txt con cookies de YouTube o Google.</string>
+    <string name="cookies_hint">YouTube pidió confirmar que no eres un robot. Prueba más tarde o en otra red, o importa cookies en Ajustes.</string>
+    <string name="cookies_open_settings">Ajustes</string>
+</resources>

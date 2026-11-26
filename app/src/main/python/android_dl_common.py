@@ -1,13 +1,11 @@
-"""Shared helpers for client downloads: quiet logging, cancellation, stage progress and YouTube clients."""
+"""Shared helpers for client downloads: quiet logging, cancellation, stage progress and YouTube retries."""
 import re
 import threading
 
 QUIET = threading.local()
 
-# YouTube restricts each internal client at different times. When the default client is asked to
-# sign in, formats() retries with these; the one that worked is remembered for the downloads.
-FALLBACK_CLIENTS = (("tv",), ("web_safari",), ("mweb",))
-CLIENTS = [None]
+# Player clients tried in order when YouTube asks for a sign-in; None is yt-dlp's default set.
+FALLBACK_CLIENTS = (None, ["tv"], ["web_safari"], ["mweb"])
 
 _ANSI = re.compile(r"\x1b?\[[0-9;]*m")
 
@@ -17,19 +15,21 @@ class Cancelled(Exception):
 
 
 def plain(text):
-    """Text without terminal colour codes (yt-dlp colours its errors)."""
+    """The text without terminal colour codes (yt-dlp colours its error messages)."""
     return _ANSI.sub("", str(text))
 
 
-def is_bot_check(error):
+def is_bot_error(error):
+    """True for YouTube's 'Sign in to confirm you're not a bot' answer."""
     text = plain(error).lower()
-    return "confirm you" in text and "bot" in text
+    return "not a bot" in text or "sign in to confirm" in text
 
 
-def extractor_options():
-    """yt-dlp options that select the YouTube client that last worked."""
-    client = CLIENTS[0]
-    return {"extractor_args": {"youtube": {"player_client": list(client)}}} if client else {}
+def youtube_opts(clients=None):
+    """yt-dlp options that force the given YouTube player clients (nothing for the default)."""
+    if not clients:
+        return {}
+    return {"extractor_args": {"youtube": {"player_client": list(clients)}}}
 
 
 def say(*args, **kwargs):

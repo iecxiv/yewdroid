@@ -7,16 +7,17 @@ import re
 import shutil
 import tempfile
 
-from android_dl_common import Cancelled, extractor_options, plain, say
+from android_dl_common import Cancelled, is_bot_error, plain, say, youtube_opts
 
 
 def _clean(message):
     return re.sub(r"https?://\S+", "<URL>", plain(message))
 
 
-def download_audio(ytid, folder, publish, format_id=None, tracker=None):
+def download_audio(ytid, folder, publish, format_id=None, tracker=None, clients=None):
     """Downloads the audio of a video. `format_id` picks a specific audio format; `tracker`
-    (android_dl_common.Progress) receives progress and can cancel."""
+    (android_dl_common.Progress) receives progress and can cancel; `clients` forces YouTube
+    player clients."""
     import yt_dlp
     folder = os.path.abspath(folder)
     os.makedirs(folder, exist_ok=True)
@@ -86,8 +87,8 @@ def download_audio(ytid, folder, publish, format_id=None, tracker=None):
         "socket_timeout": 25,
         "match_filter": lambda info, *, incomplete=False: (
             "Live streams are not supported" if info.get("is_live") else None),
-        **extractor_options(),
     }
+    options.update(youtube_opts(clients))
     try:
         with yt_dlp.YoutubeDL(options) as ydl:
             report["js_runtimes"] = list((ydl.params.get("js_runtimes") or {}).keys())
@@ -111,6 +112,10 @@ def download_audio(ytid, folder, publish, format_id=None, tracker=None):
         if tracker is not None and tracker.cancelled:
             shutil.rmtree(work, ignore_errors=True)
             raise Cancelled() from None
+        if is_bot_error(error):
+            # Nothing was downloaded: the caller may retry with another player client.
+            shutil.rmtree(work, ignore_errors=True)
+            raise
         report["error"] = _clean(error)
         report["warnings"] = list(warnings)
         diagnostic = os.path.join(work, "diagnostic.json")

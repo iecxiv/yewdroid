@@ -42,10 +42,12 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationManagerCompat
+import java.io.File
 
 private val BG = Color(0xFF0C0C0C)
 private val FG = Color(0xFFDCDFE4)
 private val ACCENT = Color(0xFF98C379)
+private val ERROR = Color(0xFFE06C75)
 
 /** Terminal translation languages shown in settings: stored value to label. */
 private val LANGUAGES = listOf(
@@ -88,6 +90,36 @@ private fun notificationSettings(ctx: Context) =
 private fun appDetails(ctx: Context) =
     Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + ctx.packageName))
 
+/** The YouTube cookies file the Python session hands to yt-dlp (yt_term.py looks for it by name). */
+private fun cookiesFile(ctx: Context) = File(ctx.filesDir, "cookies.txt")
+
+/**
+ * Copies a cookies.txt (Netscape format) chosen by the user into the app's private storage.
+ * Returns false when the file is empty, too large or has no YouTube/Google cookie line.
+ */
+private fun importCookies(ctx: Context, uri: Uri): Boolean = try {
+    val bytes = ctx.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+    val text = bytes?.takeIf { it.isNotEmpty() && it.size <= 5_000_000 }?.toString(Charsets.UTF_8)
+    val valid = text != null && text.lineSequence().any { raw ->
+        val line = raw.removePrefix("#HttpOnly_")
+        !line.startsWith("#") && line.split('\t').size >= 7 &&
+            (line.contains("youtube.com") || line.contains("google.com"))
+    }
+    if (valid && text != null) {
+        val header = "# Netscape HTTP Cookie File"
+        val content = if (text.contains("Netscape HTTP Cookie File")) text else "$header\n$text"
+        val temp = File(ctx.filesDir, "cookies.txt.tmp")
+        temp.writeText(content)
+        temp.copyTo(cookiesFile(ctx), overwrite = true)
+        temp.delete()
+        cookiesFile(ctx).isFile
+    } else {
+        false
+    }
+} catch (_: Exception) {
+    false
+}
+
 @Composable
 private fun SettingsScreen(resumes: Int, onBack: () -> Unit) {
     val ctx = LocalContext.current
@@ -104,6 +136,14 @@ private fun SettingsScreen(resumes: Int, onBack: () -> Unit) {
     val language = selectedLanguage ?: savedLanguage
     val sessionStarted by TerminalHub.sessionStarted.collectAsState()
     val translationAvailable by TerminalHub.translationAvailable.collectAsState()
+    var cookiesSaved by remember { mutableStateOf(cookiesFile(ctx).isFile) }
+    var cookiesInvalid by remember { mutableStateOf(false) }
+    val cookiesLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            cookiesInvalid = !importCookies(ctx, uri)
+            cookiesSaved = cookiesFile(ctx).isFile
+        }
+    }
     val notificationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         changes++
         val activity = ctx.findActivity()
@@ -188,6 +228,36 @@ private fun SettingsScreen(resumes: Int, onBack: () -> Unit) {
                     Text(stringResource(R.string.language_unavailable), style = note)
                 }
             }
+
+            Text(
+                stringResource(R.string.cookies_section), style = section,
+                modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
+            )
+            Text(stringResource(R.string.cookies_desc), style = note)
+            Text(
+                stringResource(if (cookiesSaved) R.string.cookies_on else R.string.cookies_off),
+                style = body, modifier = Modifier.padding(top = 8.dp)
+            )
+            if (cookiesInvalid) {
+                Text(stringResource(R.string.cookies_invalid), style = note.copy(color = ERROR))
+            }
+            Row {
+                TextButton(
+                    onClick = { cookiesLauncher.launch(arrayOf("*/*")) },
+                    colors = ButtonDefaults.textButtonColors(contentColor = ACCENT)
+                ) { Text(stringResource(R.string.cookies_import)) }
+                if (cookiesSaved) {
+                    TextButton(
+                        onClick = {
+                            cookiesFile(ctx).delete()
+                            cookiesSaved = cookiesFile(ctx).isFile
+                            cookiesInvalid = false
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = ACCENT)
+                    ) { Text(stringResource(R.string.cookies_remove)) }
+                }
+            }
+            Spacer(Modifier.height(24.dp))
         }
     }
 }
