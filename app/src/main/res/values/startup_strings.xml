@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="startup_section">Startup</string>
+    <string name="startup_tab_desc">Tab shown when the app opens.</string>
+    <string name="startup_clear_downloads">Clear the downloads list on close</string>
+    <string name="startup_clear_downloads_desc">Removes the downloads from the list when the app is closed. The saved files are not deleted.</string>
+</resources>

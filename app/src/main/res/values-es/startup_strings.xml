@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="startup_section">Inicio</string>
+    <string name="startup_tab_desc">Pestaña que se muestra al abrir la app.</string>
+    <string name="startup_clear_downloads">Borrar la lista de descargas al cerrar</string>
+    <string name="startup_clear_downloads_desc">Quita las descargas de la lista cuando se cierra la app. Los archivos guardados no se borran.</string>
+</resources>

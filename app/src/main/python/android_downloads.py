@@ -155,8 +155,19 @@ def _save():
         _log()
 
 
+def _clear_on_close():
+    """The Settings switch \"Clear the downloads list on close\" (stored by UiPrefs.kt)."""
+    try:
+        from java import jclass
+        app = jclass("com.chaquo.python.Python").getPlatform().getApplication()
+        return bool(app.getSharedPreferences("yewdroid_ui", 0).getBoolean("clear_downloads_on_close", False))
+    except Exception:
+        return False
+
+
 def configure(path):
-    """Sets the file that keeps the list and loads it; unfinished downloads become interrupted."""
+    """Sets the file that keeps the list and loads it; unfinished downloads become interrupted.
+    With the clear-on-close setting on, the list from the previous run is dropped instead."""
     path = str(path)
     if _state.get("file") == path:
         return True
@@ -175,6 +186,8 @@ def configure(path):
         pass
     except Exception:
         _log()
+    if loaded and _clear_on_close():
+        loaded = []
     with _lock:
         _state["file"] = path
         _jobs[:0] = loaded
