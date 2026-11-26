@@ -20,16 +20,21 @@ class App : Application() {
         // "Clear the downloads list on close": when the main screen is closed for good (not recreated),
         // the finished downloads are removed from the list. If the process is killed instead, the list is
         // emptied the next time it is loaded (android_downloads.configure).
-        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+        registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityDestroyed(activity: Activity) {
                 if (activity is MainActivity && activity.isFinishing && UiPrefs.clearDownloadsOnClose(this@App)) {
                     runCatching { Python.getInstance().getModule("android_downloads").callAttr("clear_finished") }
                 }
             }
 
+            // A track that finished loading while the app was in the background could not take audio focus
+            // (Android refuses it); it starts now that the app is back in front.
+            override fun onActivityResumed(activity: Activity) {
+                if (activity is MainActivity) TerminalHub.onAppForeground()
+            }
+
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
             override fun onActivityStarted(activity: Activity) {}
-            override fun onActivityResumed(activity: Activity) {}
             override fun onActivityPaused(activity: Activity) {}
             override fun onActivityStopped(activity: Activity) {}
             override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}

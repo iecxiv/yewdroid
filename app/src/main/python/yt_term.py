@@ -108,6 +108,14 @@ def _loaded(name):
     return sys.modules.get("mps_youtube." + name)
 
 
+def _loading(on):
+    """Tells the app that a track is being resolved (its stream is looked up) and has not started yet."""
+    try:
+        _sink.loading(bool(on))
+    except Exception:
+        pass
+
+
 def player_event(action):
     try:
         from mps_youtube import g
@@ -481,11 +489,14 @@ def _make_player_class(CmdPlayer):
             self._orig = None
             self._fresh = True
             self._ok = False
+            # The stream of the first track is looked up now, which can take several seconds the first time.
+            _loading(True)
             if not _background[0]:
                 try:
                     return super().play(*args, **kwargs)
                 finally:
                     self._active = False
+                    _loading(False)
                     try:
                         _sink.stopPlayback()
                     except Exception:
@@ -498,6 +509,7 @@ def _make_player_class(CmdPlayer):
                     traceback.print_exc(file=_orig_err)
                 finally:
                     self._active = False
+                    _loading(False)
                     try:
                         _sink.stopPlayback()
                     except Exception:
@@ -537,6 +549,8 @@ def _make_player_class(CmdPlayer):
                 video = isinstance(self.stream, dict) and self.stream.get("mtype") == "video"
                 _sink.video(bool(video))
                 _sink.mode(True)
+                # The stream is resolved: from here on the track is handed to the player.
+                _loading(False)
                 _sink.play(self.stream["url"], str(song.title), str(artist),
                            thumb, int(song.length or 0))
                 if self._halt:
@@ -559,6 +573,8 @@ def _make_player_class(CmdPlayer):
                 pass
             else:
                 self.next()
+                # The next track of the queue is looked up before it starts.
+                _loading(self.song_no < len(self.songlist))
 
         def next(self):
             self.song_no += 1

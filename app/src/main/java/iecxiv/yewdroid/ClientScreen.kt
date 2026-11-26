@@ -203,9 +203,9 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     val focus = LocalFocusManager.current
     val scope = rememberCoroutineScope()
     val state by TerminalHub.client.collectAsState()
+    val loadingTrack by TerminalHub.loadingTrack.collectAsState()
     val downloads by DownloadHub.downloads.collectAsState()
     val formats by DownloadHub.formats.collectAsState()
-    val loadingPlay by TerminalHub.loadingPlay.collectAsState()
     val activeDownloads = downloads.items.count { it.active }
     val terminalTouched = remember { ClientMemory.takeTerminalTouch() }
     var query by rememberSaveable { mutableStateOf(ClientMemory.query) }
@@ -407,16 +407,18 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                     ) { Text(stringResource(R.string.history_clear), fontSize = 12.sp) }
                 }
             }
-            if (state.busy || !state.ready || waiting || loadingPlay) {
+            if (state.busy || !state.ready || waiting || loadingTrack) {
                 LinearProgressIndicator(Modifier.fillMaxWidth(), color = ACCENT, trackColor = Color(0xFF2A2A2A))
             }
-            if (loadingPlay) {
+            // The stream of a track can take many seconds to be found the first time: say so.
+            if (loadingTrack) {
                 Text(
                     stringResource(R.string.client_loading_track),
                     style = small.copy(color = ACCENT),
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                 )
-            } else if (shownMessage.isNotEmpty()) {
+            }
+            if (shownMessage.isNotEmpty()) {
                 Text(shownMessage, style = small.copy(color = ACCENT), modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
             }
             if (showHistory) {
@@ -797,10 +799,8 @@ private fun ResultRow(
     Row(
         Modifier.fillMaxWidth()
             .clickable {
-                // Playlists open; videos play (and queue the rest of the page when auto-queue is on). Getting a
-                // video can take a while, so further taps are ignored until it starts.
-                if (playlist) TerminalHub.runCommand(item.n.toString())
-                else TerminalHub.runPlay(selection(item.n, queueRest))
+                // Playlists open; videos play (and queue the rest of the page when auto-queue is on).
+                TerminalHub.runCommand(if (playlist) item.n.toString() else selection(item.n, queueRest))
             }
             .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -837,7 +837,7 @@ private fun ResultRow(
                             text = { Text(stringResource(label)) },
                             onClick = {
                                 menu = false
-                                TerminalHub.runPlay(command(item.n, queueRest))
+                                TerminalHub.runCommand(command(item.n, queueRest))
                             }
                         )
                     }

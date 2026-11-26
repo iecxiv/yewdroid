@@ -28,9 +28,6 @@ import kotlinx.coroutines.withContext
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
-/** Longest a play request is considered pending (ms): the first extraction of a video can take a while. */
-private const val PLAY_PENDING_MS = 45_000L
-
 /** Interface invoked by Python (yt_term.py). */
 interface TermSink {
     fun write(s: String)
@@ -40,6 +37,8 @@ interface TermSink {
     fun stopPlayback()
     /** yewtube is waiting for a command (the native client refreshes its results). */
     fun idle()
+    /** A track is being resolved (its stream is looked up) and has not been handed to the player yet. */
+    fun loading(on: Boolean)
 }
 
 /** Public named class so Chaquopy can call it from Python. */
@@ -52,6 +51,7 @@ class HubSink : TermSink {
     override fun mode(playing: Boolean) { TerminalHub.playing.value = playing }
     override fun stopPlayback() { TerminalHub.onStopPlayback() }
     override fun idle() { TerminalHub.onIdle() }
+    override fun loading(on: Boolean) { TerminalHub.loadingTrack.value = on }
 }
 
 object TerminalHub {
@@ -79,8 +79,8 @@ object TerminalHub {
     val shuffle = MutableStateFlow(false)
     /** Repeat chosen in the player: 0 = off, 1 = the list, 2 = the current track. */
     val repeat = MutableStateFlow(0)
-    /** True from tapping a video until it starts (or fails): the client shows it and ignores more taps. */
-    val loadingPlay = MutableStateFlow(false)
+    /** True while the stream of a track is being looked up, before the player gets it (can take many seconds). */
+    val loadingTrack = MutableStateFlow(false)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val main = Handler(Looper.getMainLooper())
@@ -99,8 +99,8 @@ object TerminalHub {
     /** Where to resume the track that is started again after the "show video" setting changed, and its title. */
     @Volatile private var resumeMs = 0L
     @Volatile private var resumeTitle = ""
-    /** When the play request now pending was made (ms), to tell it from a later one. */
-    @Volatile private var playPendingSince = 0L
+    /** True when Android refused audio focus to a track that never started: it starts when the app is in front. */
+    @Volatile private var resumeOnForeground = false
     private var surface: SurfaceView? = null
     private var started = false
     private val sink = HubSink()
@@ -116,6 +116,15 @@ object TerminalHub {
             if (isPlaying && playing.value && !startReported) {
                 startReported = true
                 scope.launch { runCatching { py?.callAttr("track_started") } }
+            }
+        }
+        override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+            // Android does not give audio focus to an app in the background, which is what happens when a slow
+            // track finishes loading after the user left: the player pauses itself before it ever sounded.
+            if (!playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS &&
+                playing.value && !startReported
+            ) {
+                resumeOnForeground = true
             }
         }
         override fun onVideoSizeChanged(videoSize: VideoSize) {
@@ -154,6 +163,13 @@ object TerminalHub {
     fun detachSurface(view: SurfaceView) {
         if (surface === view) surface = null
         exo?.clearVideoSurfaceView(view)
+    }
+
+    /** The app is in front again: a track that Android would not let start in the background starts now. */
+    fun onAppForeground() {
+        if (!resumeOnForeground) return
+        resumeOnForeground = false
+        if (playing.value) main.post { exo?.play() }
     }
 
     @Synchronized
@@ -292,26 +308,6 @@ object TerminalHub {
         scope.launch { runCatching { py?.callAttr("send", line) } }
     }
 
-    /**
-     * Sends a command that starts playback. Getting the video can take many seconds the first time, and a
-     * second tap meanwhile would be queued and restart the track once the first one starts, so taps are
-     * ignored while one is pending. Returns false when this one was ignored.
-     */
-    fun runPlay(line: String): Boolean {
-        if (py == null) return false
-        val now = System.currentTimeMillis()
-        if (loadingPlay.value && now - playPendingSince < PLAY_PENDING_MS) return false
-        playPendingSince = now
-        loadingPlay.value = true
-        runCommand(line)
-        // If neither the start nor a failure is ever reported, the request is not kept pending for ever.
-        scope.launch {
-            delay(PLAY_PENDING_MS)
-            if (playPendingSince == now) loadingPlay.value = false
-        }
-        return true
-    }
-
     /** Sends several commands in order from one coroutine, so they cannot overtake each other. */
     fun runCommands(vararg lines: String) {
         if (py == null) return
@@ -359,12 +355,11 @@ object TerminalHub {
     fun onVideo(on: Boolean) { nextVideo = on }
 
     fun onPlay(url: String, title: String, artist: String, thumb: String) {
-        // The video is in hand and starting: it is no longer a pending request.
-        loadingPlay.value = false
         // The same track started again after the "show video" setting changed resumes where it was.
         val start = if (resumeMs > 0L && title == resumeTitle) resumeMs else 0L
         resumeMs = 0L
         resumeTitle = ""
+        resumeOnForeground = false
         nowPlaying.value = title
         videoOn.value = nextVideo
         positionMs.value = start
@@ -391,9 +386,9 @@ object TerminalHub {
     }
 
     fun onStopPlayback() {
-        // Playback ended, or a play request failed before starting: nothing is pending any more.
-        loadingPlay.value = false
         playing.value = false
+        loadingTrack.value = false
+        resumeOnForeground = false
         nowPlaying.value = ""
         videoOn.value = false
         positionMs.value = 0L
