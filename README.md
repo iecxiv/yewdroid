@@ -85,9 +85,11 @@ Para comprobar que FFmpeg está en la APK: `unzip -l app/build/outputs/apk/debug
 
 El cambio de una dependencia no sustituye la compilación y validación en un dispositivo. Un error `Failed to resolve 'www.youtube.com'` señala un fallo de resolución DNS; ese mensaje por sí solo no demuestra que el vídeo haya sido eliminado.
 
-### Estado de validación
+### Estado de validación (26 de noviembre de 2026)
 
-No todo está probado en un dispositivo. Está pendiente de validar: la compilación completa de FFmpeg y la conversión de audio, las notificaciones de descarga, la persistencia de la lista de descargas, las opciones de Ajustes, el cierre desde recientes, la vista de lista con quitar y añadir elementos, la recuperación de los resultados de Buscar y el selector de idioma de la app.
+Comprobado por el autor en un dispositivo: la compilación de FFmpeg y la conversión de audio al descargar (queda solo el archivo convertido), la vista de lista con quitar y añadir elementos, la recuperación de los resultados de Buscar, la recarga de la lista abierta tras añadir, el selector de idioma de la app y el editor de preajustes traducido.
+
+Sin comprobar: la exportación de audio en Android 8 y 9 (la corrección procede de leer el código, no de una prueba), los siete perfiles de codificación, la alineación de 16 KB de los binarios y la compatibilidad de licencias de una APK concreta. Las notificaciones de descarga, la persistencia de su lista, las opciones de Ajustes y el cierre desde recientes tampoco constan como confirmados.
 
 Limitaciones conocidas: la conversión solo cubre audio, su progreso es indeterminado y, si el preajuste no admite la extensión descargada, el cliente guarda el original sin avisar. Los avisos de áñadido y quitado de las listas dependen del catálogo de traducción de yewtube y pueden salir en inglés. En Android 8 y 9 las descargas no se exportan a la carpeta pública Descargas.
 
@@ -182,9 +184,11 @@ To check that FFmpeg is in the APK: `unzip -l app/build/outputs/apk/debug/app-de
 
 Changing a dependency does not replace building and testing on a device. A `Failed to resolve 'www.youtube.com'` error indicates a DNS resolution failure; that message alone does not establish that a video has been removed.
 
-### Validation status
+### Validation status (26 November 2026)
 
-Not everything has been tested on a device. Still to validate: the full FFmpeg build and audio conversion, download notifications, persistence of the download list, the Settings options, closing from recents, the playlist view with removing and adding entries, recovery of the Search results and the app language selector.
+Checked by the author on a device: the FFmpeg build and audio conversion on download (only the converted file remains), the playlist view with removing and adding entries, recovery of the Search results, reloading the open playlist after adding, the app language selector and the translated preset editor.
+
+Not checked: audio export on Android 8 and 9 (the fix comes from reading the code, not from a test), the seven encoding profiles, the 16 KB alignment of the binaries and license compatibility of a specific APK. Download notifications, persistence of their list, the Settings options and closing from recents are not recorded as confirmed either.
 
 Known limitations: conversion covers audio only, its progress is indeterminate and, if the preset does not accept the downloaded extension, the client keeps the original without a warning. The added and removed messages of playlists depend on yewtube's translation catalogue and may appear in English. On Android 8 and 9, downloads are not exported to the public Downloads folder.
 
