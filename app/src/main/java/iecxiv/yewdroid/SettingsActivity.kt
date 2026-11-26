@@ -1,0 +1,148 @@
+package iecxiv.yewdroid
+
+import android.Manifest
+import android.app.Activity
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.app.NotificationManagerCompat
+
+private val BG = Color(0xFF0C0C0C)
+private val FG = Color(0xFFDCDFE4)
+private val ACCENT = Color(0xFF98C379)
+
+class SettingsActivity : ComponentActivity() {
+    private var resumes by mutableIntStateOf(0)
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent { SettingsScreen(resumes) { finish() } }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        resumes++
+    }
+}
+
+private fun Context.findActivity(): Activity? {
+    var current = this
+    while (current is ContextWrapper) {
+        if (current is Activity) return current
+        current = current.baseContext
+    }
+    return null
+}
+
+private fun openFirst(ctx: Context, vararg intents: Intent) {
+    for (intent in intents) {
+        try { ctx.startActivity(intent); return } catch (_: ActivityNotFoundException) {}
+    }
+}
+
+private fun notificationSettings(ctx: Context) =
+    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
+
+private fun appDetails(ctx: Context) =
+    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + ctx.packageName))
+
+@Composable
+private fun SettingsScreen(resumes: Int, onBack: () -> Unit) {
+    val ctx = LocalContext.current
+    var changes by remember { mutableIntStateOf(0) }
+    val notificationsAllowed = remember(resumes, changes) {
+        NotificationManagerCompat.from(ctx).areNotificationsEnabled()
+    }
+    val batteryAllowed = remember(resumes, changes) {
+        ctx.getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(ctx.packageName) == true
+    }
+    val notificationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        changes++
+        val activity = ctx.findActivity()
+        if (!granted && activity != null &&
+            !activity.shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)) {
+            openFirst(ctx, notificationSettings(ctx), appDetails(ctx))
+        }
+    }
+    val batteryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { changes++ }
+
+    fun allowNotifications() {
+        val granted = Build.VERSION.SDK_INT < 33 ||
+            ctx.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        if (granted) openFirst(ctx, notificationSettings(ctx), appDetails(ctx))
+        else notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
+    fun allowBattery() {
+        val request = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + ctx.packageName))
+        try {
+            batteryLauncher.launch(request)
+        } catch (_: ActivityNotFoundException) {
+            openFirst(ctx, Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS), appDetails(ctx))
+        }
+    }
+
+    val title = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 20.sp, color = ACCENT)
+    val section = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp, color = ACCENT)
+    Column(Modifier.fillMaxSize().background(BG).systemBarsPadding()) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = FG) }
+            Text("Settings", style = title)
+        }
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
+            Text("App permissions", style = section, modifier = Modifier.padding(vertical = 8.dp))
+            PermissionRow("Notifications", "Show playback and download notifications", notificationsAllowed) { allowNotifications() }
+            PermissionRow("Battery optimization", "Keep playback running in the background", batteryAllowed) { allowBattery() }
+            TextButton(
+                onClick = { openFirst(ctx, appDetails(ctx)) },
+                colors = ButtonDefaults.textButtonColors(contentColor = ACCENT)
+            ) { Text("Open system app settings") }
+        }
+    }
+}
+
+@Composable
+private fun PermissionRow(name: String, description: String, allowed: Boolean, onAllow: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(name, style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 15.sp, color = FG))
+            Text(description, style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = Color.Gray))
+        }
+        if (allowed) {
+            Text("Allowed", style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp, color = ACCENT))
+        } else {
+            TextButton(onClick = onAllow, colors = ButtonDefaults.textButtonColors(contentColor = ACCENT)) { Text("Allow") }
+        }
+    }
+}

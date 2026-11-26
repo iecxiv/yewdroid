@@ -190,6 +190,7 @@ fun TerminalScreen() {
                 .clickableNoRipple { changeZoom(-1f) }.padding(12.dp))
             Text("A+", color = FG, style = uiStyle, modifier = Modifier
                 .clickableNoRipple { changeZoom(1f) }.padding(12.dp))
+            CtrlBtn(Icons.Filled.Settings) { ctx.startActivity(Intent(ctx, SettingsActivity::class.java)) }
         }
 
         if (showVideo) {
