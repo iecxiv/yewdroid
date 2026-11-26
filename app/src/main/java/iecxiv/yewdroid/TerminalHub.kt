@@ -161,15 +161,15 @@ object TerminalHub {
     }
 
     /**
-     * Keeps the screen from turning off while a video is showing and playing, in the expanded player, the
-     * terminal and fullscreen. It may turn off when the video is paused, the track is audio only, or the
-     * video is only in the mini player. Runs on the main thread, where the views live.
+     * Keeps the screen from turning off while a video is showing and playing in the terminal, the expanded
+     * player or fullscreen. It may turn off when the video is paused, the track is audio only, or the video is
+     * only in the mini player. Runs on the main thread, where the views live.
      */
     private fun updateKeepScreenOn() {
         surface?.keepScreenOn = audioOn.value && videoOn.value && playing.value && !miniVideo
     }
 
-    /** The mini player calls this while it shows the video (and when it stops showing it). */
+    /** The mini player calls this while it shows the video, so the screen can turn off then. Main thread. */
     fun setMiniVideo(on: Boolean) {
         miniVideo = on
         updateKeepScreenOn()
