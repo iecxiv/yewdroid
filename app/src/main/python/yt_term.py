@@ -6,6 +6,7 @@ The yewtube code is not modified: everything is patched at runtime.
 import json
 import os
 import queue
+import random
 import sys
 import threading
 import time
@@ -23,6 +24,8 @@ _orig_err = sys.stderr
 # True while the native client is shown: playback then runs in its own thread so yewtube
 # keeps answering commands (search, open, paging) while something plays.
 _background = [False]
+# Playback modes chosen in the player: shuffle on/off and repeat 0 = off, 1 = the list, 2 = one track.
+_mode = {"shuffle": False, "repeat": 0}
 
 
 class _Out:
@@ -106,13 +109,44 @@ def player_event(action):
         traceback.print_exc(file=_orig_err)
 
 
+def set_play_mode(shuffle, repeat):
+    """Shuffle on/off and repeat (0 off, 1 the list, 2 one track), chosen in the player."""
+    _mode["shuffle"] = bool(shuffle)
+    _mode["repeat"] = int(repeat)
+    try:
+        from mps_youtube import g
+        p = g.PLAYER_OBJ
+        if getattr(p, "_active", False) and hasattr(p, "apply_shuffle"):
+            p.apply_shuffle(_mode["shuffle"])
+    except Exception:
+        traceback.print_exc(file=_orig_err)
+
+
+def _record_history(song):
+    """Adds a track to the history without repeats: a track played again moves to the newest position."""
+    from mps_youtube import g, history
+    from mps_youtube.playlist import Playlist
+    if not g.userhist.get("history"):
+        g.userhist["history"] = Playlist("history")
+    songs = g.userhist["history"].songs
+    seen, newest_first = set(), []
+    for item in reversed(list(songs) + [song]):
+        if item.ytid not in seen:
+            seen.add(item.ytid)
+            newest_first.append(item)
+    songs[:] = list(reversed(newest_first))
+    history.save()
+
+
 def track_started():
     """Called by the app when the current track really starts sounding: only then it goes to the history."""
     try:
-        from mps_youtube import config, g, history
+        from mps_youtube import config, g
         p = g.PLAYER_OBJ
-        if getattr(p, "_active", False) and config.HISTORY.get:
-            history.add(p.song)
+        if getattr(p, "_active", False):
+            p._ok = True
+            if config.HISTORY.get:
+                _record_history(p.song)
     except Exception:
         traceback.print_exc(file=_orig_err)
 
@@ -348,6 +382,12 @@ def _make_player_class(CmdPlayer):
             self._halt = False
             self._thread = None
             self.p = None
+            # Shuffle: the order before shuffling (None while not shuffled).
+            self._orig = None
+            # True for the first track of a playback run (the shuffle mode is applied then).
+            self._fresh = False
+            # True once a track started sounding since the list last wrapped (stops a repeat loop of failures).
+            self._ok = False
 
         def _generate_real_playerargs(self):
             return []
@@ -361,6 +401,26 @@ def _make_player_class(CmdPlayer):
         def finish(self, action):
             self._action = action
             self._evt.set()
+
+        def apply_shuffle(self, on):
+            """Shuffles the tracks after the current one, or restores the original order."""
+            songs = list(self.songlist or [])
+            index = self.song_no
+            if not 0 <= index < len(songs):
+                return
+            if on:
+                if self._orig is not None:
+                    return
+                self._orig = songs
+                rest = songs[index + 1:]
+                random.shuffle(rest)
+                self.songlist = songs[:index + 1] + rest
+            elif self._orig is not None:
+                current = songs[index]
+                original = self._orig
+                self._orig = None
+                self.songlist = original
+                self.song_no = next((i for i, s in enumerate(original) if s.ytid == current.ytid), index)
 
         def _stop_loop(self):
             """Ends a background playback loop; False when it did not end in time."""
@@ -379,6 +439,9 @@ def _make_player_class(CmdPlayer):
         def play(self, *args, **kwargs):
             if not self._stop_loop():
                 return None
+            self._orig = None
+            self._fresh = True
+            self._ok = False
             if not _background[0]:
                 try:
                     return super().play(*args, **kwargs)
@@ -409,6 +472,10 @@ def _make_player_class(CmdPlayer):
             if self._halt:
                 self.stop()
                 return
+            if self._fresh:
+                self._fresh = False
+                if _mode["shuffle"]:
+                    self.apply_shuffle(True)
             self._evt.clear()
             self._action = "next"
             self._active = True
@@ -431,14 +498,22 @@ def _make_player_class(CmdPlayer):
                 self.previous()
             elif action == "stop":
                 self.stop()
+            elif action == "ended" and _mode["repeat"] == 2:
+                # Repeat one: the track ended by itself, so the same one plays again.
+                pass
             else:
                 self.next()
 
         def next(self):
             self.song_no += 1
+            if self.song_no >= len(self.songlist) and _mode["repeat"] == 1 and self._ok:
+                self.song_no = 0
+                self._ok = False
 
         def previous(self):
             self.song_no -= 1
+            if self.song_no < 0 and _mode["repeat"] == 1:
+                self.song_no = len(self.songlist) - 1
 
         def stop(self):
             self.song_no = len(self.songlist)

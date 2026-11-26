@@ -82,13 +82,18 @@ fun MiniPlayer(onOpen: () -> Unit) {
     }
 }
 
-/** Full player: artwork, progress, controls and the playback queue. Video is drawn above by the host screen. */
+/**
+ * Full player: artwork, progress, controls and the playback queue. Video is drawn above by the host screen;
+ * while it is visible the host already shows the controls and the time bar, so they are left out here.
+ */
 @Composable
 fun PlayerScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
     val title by TerminalHub.nowPlaying.collectAsState()
     val audioOn by TerminalHub.audioOn.collectAsState()
     val videoOn by TerminalHub.videoOn.collectAsState()
     val queue by TerminalHub.queue.collectAsState()
+    val shuffle by TerminalHub.shuffle.collectAsState()
+    val repeat by TerminalHub.repeat.collectAsState()
     val current = queue.items.getOrNull(queue.index)
     LazyColumn(modifier.background(BG)) {
         item {
@@ -113,42 +118,68 @@ fun PlayerScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
                         )
                     }
                 }
-                SeekBar(Modifier.fillMaxWidth())
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = { TerminalHub.control("prev") }) {
-                        Icon(Icons.Filled.SkipPrevious, stringResource(R.string.player_previous), tint = FG)
-                    }
-                    IconButton(onClick = { TerminalHub.control("seekb") }) {
-                        Icon(Icons.Filled.Replay10, stringResource(R.string.player_back10), tint = FG)
-                    }
-                    IconButton(onClick = { TerminalHub.control("toggle") }, modifier = Modifier.size(56.dp)) {
-                        Icon(
-                            if (audioOn) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                            contentDescription = stringResource(if (audioOn) R.string.player_pause else R.string.player_play),
-                            tint = ACCENT,
-                            modifier = Modifier.size(40.dp)
-                        )
-                    }
-                    IconButton(onClick = { TerminalHub.control("seekf") }) {
-                        Icon(Icons.Filled.Forward10, stringResource(R.string.player_forward10), tint = FG)
-                    }
-                    IconButton(onClick = { TerminalHub.control("next") }) {
-                        Icon(Icons.Filled.SkipNext, stringResource(R.string.player_next), tint = FG)
-                    }
-                    IconButton(onClick = { TerminalHub.control("stop") }) {
-                        Icon(Icons.Filled.Stop, stringResource(R.string.player_stop), tint = FG)
+                if (!videoOn) {
+                    SeekBar(Modifier.fillMaxWidth())
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = { TerminalHub.control("prev") }) {
+                            Icon(Icons.Filled.SkipPrevious, stringResource(R.string.player_previous), tint = FG)
+                        }
+                        IconButton(onClick = { TerminalHub.control("seekb") }) {
+                            Icon(Icons.Filled.Replay10, stringResource(R.string.player_back10), tint = FG)
+                        }
+                        IconButton(onClick = { TerminalHub.control("toggle") }, modifier = Modifier.size(56.dp)) {
+                            Icon(
+                                if (audioOn) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                contentDescription = stringResource(if (audioOn) R.string.player_pause else R.string.player_play),
+                                tint = ACCENT,
+                                modifier = Modifier.size(40.dp)
+                            )
+                        }
+                        IconButton(onClick = { TerminalHub.control("seekf") }) {
+                            Icon(Icons.Filled.Forward10, stringResource(R.string.player_forward10), tint = FG)
+                        }
+                        IconButton(onClick = { TerminalHub.control("next") }) {
+                            Icon(Icons.Filled.SkipNext, stringResource(R.string.player_next), tint = FG)
+                        }
+                        IconButton(onClick = { TerminalHub.control("stop") }) {
+                            Icon(Icons.Filled.Stop, stringResource(R.string.player_stop), tint = FG)
+                        }
                     }
                 }
-                if (queue.items.size > 1) {
+                // Queue title with the shuffle and repeat buttons; shown with or without video.
+                Row(
+                    Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
-                        stringResource(R.string.player_queue),
+                        if (queue.items.size > 1) stringResource(R.string.player_queue) else "",
                         style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp, color = ACCENT),
-                        modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp)
+                        modifier = Modifier.weight(1f)
                     )
+                    IconButton(onClick = { TerminalHub.toggleShuffle() }) {
+                        Icon(
+                            Icons.Filled.Shuffle,
+                            contentDescription = stringResource(R.string.player_shuffle),
+                            tint = if (shuffle) ACCENT else FG
+                        )
+                    }
+                    IconButton(onClick = { TerminalHub.cycleRepeat() }) {
+                        Icon(
+                            if (repeat == 2) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
+                            contentDescription = stringResource(
+                                when (repeat) {
+                                    1 -> R.string.player_repeat_all
+                                    2 -> R.string.player_repeat_one
+                                    else -> R.string.player_repeat_off
+                                }
+                            ),
+                            tint = if (repeat == 0) FG else ACCENT
+                        )
+                    }
                 }
             }
         }

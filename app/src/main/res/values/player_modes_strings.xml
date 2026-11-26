@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="player_shuffle">Shuffle</string>
+    <string name="player_repeat_off">Repeat: off</string>
+    <string name="player_repeat_all">Repeat: the list</string>
+    <string name="player_repeat_one">Repeat: this track</string>
+</resources>

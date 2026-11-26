@@ -72,6 +72,10 @@ object TerminalHub {
     val translated = MutableStateFlow(false)
     /** True once the Python session has loaded the translation catalogue (or failed to). */
     val sessionStarted = MutableStateFlow(false)
+    /** Shuffle chosen in the player (the tracks after the current one are mixed). */
+    val shuffle = MutableStateFlow(false)
+    /** Repeat chosen in the player: 0 = off, 1 = the list, 2 = the current track. */
+    val repeat = MutableStateFlow(0)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val main = Handler(Looper.getMainLooper())
@@ -91,7 +95,8 @@ object TerminalHub {
 
     private val listener = object : Player.Listener {
         override fun onPlaybackStateChanged(state: Int) {
-            if (state == Player.STATE_ENDED && playing.value) event("next")
+            // "ended" (the track finished by itself) differs from "next" (the user skipped) for repeat-one.
+            if (state == Player.STATE_ENDED && playing.value) event("ended")
         }
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             audioOn.value = isPlaying
@@ -162,6 +167,7 @@ object TerminalHub {
             sessionStarted.value = true
             py = m
             runCatching { m.callAttr("set_background", background) }
+            runCatching { m.callAttr("set_play_mode", shuffle.value, repeat.value) }
             val initial = sizes.tryReceive().getOrNull() ?: (cols to rows)
             m.callAttr("start", sink, dir, initial.first, initial.second)
             scope.launch { tick() }
@@ -280,6 +286,25 @@ object TerminalHub {
     fun jumpTo(index: Int) {
         scope.launch {
             runCatching { Python.getInstance().getModule("yt_client").callAttr("jump", index) }
+        }
+    }
+
+    /** Turns shuffle on or off; the queue shown is re-read because its order changes. */
+    fun toggleShuffle() {
+        shuffle.value = !shuffle.value
+        pushMode(refresh = true)
+    }
+
+    /** Cycles the repeat mode: off, the list, the current track. */
+    fun cycleRepeat() {
+        repeat.value = (repeat.value + 1) % 3
+        pushMode(refresh = false)
+    }
+
+    private fun pushMode(refresh: Boolean) {
+        scope.launch {
+            runCatching { py?.callAttr("set_play_mode", shuffle.value, repeat.value) }
+            if (refresh) refreshQueue()
         }
     }
 

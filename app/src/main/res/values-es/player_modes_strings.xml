@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="player_shuffle">Aleatorio</string>
+    <string name="player_repeat_off">Repetir: no</string>
+    <string name="player_repeat_all">Repetir: la lista</string>
+    <string name="player_repeat_one">Repetir: esta pista</string>
+</resources>
