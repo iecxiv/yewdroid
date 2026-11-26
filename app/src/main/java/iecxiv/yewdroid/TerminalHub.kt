@@ -81,6 +81,8 @@ object TerminalHub {
     @Volatile private var exo: ExoPlayer? = null
     @Volatile private var nextVideo = false
     @Volatile private var appContext: Context? = null
+    /** Whether playback runs in its own thread (native client) instead of blocking yewtube. */
+    @Volatile private var background = false
     private var surface: SurfaceView? = null
     private var started = false
     private val sink = HubSink()
@@ -150,6 +152,7 @@ object TerminalHub {
             translated.value = enabled && available
             sessionStarted.value = true
             py = m
+            runCatching { m.callAttr("set_background", background) }
             val initial = sizes.tryReceive().getOrNull() ?: (cols to rows)
             m.callAttr("start", sink, dir, initial.first, initial.second)
             scope.launch { tick() }
@@ -160,6 +163,16 @@ object TerminalHub {
                 }
             }
         }
+    }
+
+    /**
+     * In the native client playback runs in a background thread so yewtube keeps answering commands
+     * (search, open, paging) while something plays. The terminal keeps the blocking behaviour.
+     */
+    fun setBackgroundPlayback(on: Boolean) {
+        background = on
+        val module = py ?: return
+        scope.launch { runCatching { module.callAttr("set_background", on) } }
     }
 
     fun setTranslated(ctx: Context, on: Boolean) {

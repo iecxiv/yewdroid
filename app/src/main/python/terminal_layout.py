@@ -150,7 +150,10 @@ def install(term):
             g.detectable_size = True
             value = g.content
             renderer = next((entry[1:] for entry in reversed(renders) if entry[0] is value), None)
-            last[0] = (value, renderer, g.message, g.rprompt)
+            # The background playback thread also draws screens; they are not the screen to repaint
+            # nor the message the native client should show.
+            if threading.current_thread().name != "yewtube-player":
+                last[0] = (value, renderer, g.message, g.rprompt)
             return original_update(*args, **kwargs)
 
         def repaint():

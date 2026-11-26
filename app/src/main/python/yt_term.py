@@ -20,6 +20,9 @@ _sink = None
 _in = None
 _size = [80, 30]
 _orig_err = sys.stderr
+# True while the native client is shown: playback then runs in its own thread so yewtube
+# keeps answering commands (search, open, paging) while something plays.
+_background = [False]
 
 
 class _Out:
@@ -87,6 +90,10 @@ def interrupt():
 
 def resize(cols, rows):
     _size[0], _size[1] = int(cols), int(rows)
+
+
+def set_background(on):
+    _background[0] = bool(on)
 
 
 def player_event(action):
@@ -322,6 +329,8 @@ def _make_player_class(CmdPlayer):
             self._evt = threading.Event()
             self._action = "next"
             self._active = False
+            self._halt = False
+            self._thread = None
             self.p = None
 
         def _generate_real_playerargs(self):
@@ -337,17 +346,53 @@ def _make_player_class(CmdPlayer):
             self._action = action
             self._evt.set()
 
+        def _stop_loop(self):
+            """Ends a background playback loop; False when it did not end in time."""
+            thread = self._thread
+            if thread is not None and thread.is_alive():
+                self._halt = True
+                self._action = "stop"
+                self._evt.set()
+                thread.join(30)
+                if thread.is_alive():
+                    return False
+            self._thread = None
+            self._halt = False
+            return True
+
         def play(self, *args, **kwargs):
-            try:
-                return super().play(*args, **kwargs)
-            finally:
-                self._active = False
+            if not self._stop_loop():
+                return None
+            if not _background[0]:
                 try:
-                    _sink.stopPlayback()
-                except Exception:
-                    pass
+                    return super().play(*args, **kwargs)
+                finally:
+                    self._active = False
+                    try:
+                        _sink.stopPlayback()
+                    except Exception:
+                        pass
+
+            def loop():
+                try:
+                    CmdPlayer.play(self, *args, **kwargs)
+                except BaseException:
+                    traceback.print_exc(file=_orig_err)
+                finally:
+                    self._active = False
+                    try:
+                        _sink.stopPlayback()
+                    except Exception:
+                        pass
+
+            self._thread = threading.Thread(target=loop, daemon=True, name="yewtube-player")
+            self._thread.start()
+            return None
 
         def _launch_player(self):
+            if self._halt:
+                self.stop()
+                return
             self._evt.clear()
             self._action = "next"
             self._active = True
@@ -360,7 +405,10 @@ def _make_player_class(CmdPlayer):
             _sink.mode(True)
             _sink.play(self.stream["url"], str(song.title), str(artist),
                        thumb, int(song.length or 0))
-            self._evt.wait()
+            if self._halt:
+                self._action = "stop"
+            else:
+                self._evt.wait()
             self._active = False
             action = self._action
             if action == "prev":

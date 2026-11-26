@@ -116,6 +116,11 @@ fun ClientScreen(modifier: Modifier = Modifier) {
         else searches.filter { it.contains(typed, ignoreCase = true) && !it.equals(typed, ignoreCase = true) }
     }
     val showHistory = section == Section.SEARCH && focused && suggestions.isNotEmpty()
+    // While the native client is shown, playback runs in the background so commands keep working.
+    DisposableEffect(Unit) {
+        TerminalHub.setBackgroundPlayback(true)
+        onDispose { TerminalHub.setBackgroundPlayback(false) }
+    }
     LaunchedEffect(Unit) {
         TerminalHub.ensureStarted(ctx.applicationContext, CLIENT_COLS, CLIENT_ROWS)
     }
