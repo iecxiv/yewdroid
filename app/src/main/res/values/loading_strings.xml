@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="client_loading_track">Loading track…</string>
+    <!-- Empty on purpose: client_loading_track lives in loadingtrack_strings.xml. This file can be deleted. -->
 </resources>
