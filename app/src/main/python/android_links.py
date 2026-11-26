@@ -4,20 +4,26 @@ import sys
 from urllib.parse import urlencode
 
 _installed = False
-HELP = {
-    "openwith": (
-        "\n    Opening Links\n\n"
-        "    openwith N - open result N's link in a compatible app.\n"
-        "    N refers to a video or YouTube playlist in the current list.\n"
-    ),
-    "share": (
-        "\n    Sharing Links\n\n"
-        "    share N - open the share chooser for result N's link.\n"
-        "    N refers to a video or YouTube playlist in the current list.\n"
-        "    Shares the YouTube link, not a downloaded file.\n"
-        "    Nothing is sent automatically: confirm in the app you choose.\n"
-    ),
-}
+TOPICS = ("openwith", "share")
+
+
+def help_text():
+    """Help pages, coloured like the other yewtube topics (built when shown, so colours are available)."""
+    from mps_youtube import c
+    return {
+        "openwith": (
+            "\n    {0}Opening Links{1}\n\n"
+            "    {2}openwith N{1} - open result N's link in a compatible app.\n"
+            "    N refers to a video or YouTube playlist in the current list.\n"
+        ).format(c.ul, c.w, c.y),
+        "share": (
+            "\n    {0}Sharing Links{1}\n\n"
+            "    {2}share N{1} - open the share chooser for result N's link.\n"
+            "    N refers to a video or YouTube playlist in the current list.\n"
+            "    Shares the YouTube link, not a downloaded file.\n"
+            "    Nothing is sent automatically: confirm in the app you choose.\n"
+        ).format(c.ul, c.w, c.y),
+    }
 
 
 def _format_help(text):
@@ -27,15 +33,16 @@ def _format_help(text):
 
 def _help_topics(topics):
     result = []
+    texts = help_text()
     for name, title, body in topics:
-        if name in HELP:
+        if name in TOPICS:
             continue
         if name == "basic":
             body = "\n".join(line for line in body.split("\n") if not re.match(
                 r"\s*[xX]\s+<number>", re.sub(r"\x1b\[[0-9;]*m", "", line)))
         result.append((name, title, body))
-    result.extend((name, "Opening Links" if name == "openwith" else "Sharing Links", text)
-                  for name, text in HELP.items())
+    result.extend((name, "Opening Links" if name == "openwith" else "Sharing Links", texts[name])
+                  for name in TOPICS)
     return result
 
 
@@ -83,7 +90,7 @@ def install():
     @command(r"(?:help|h)\s+(openwith|share)")
     @command(r"(openwith|share)")
     def link_help(action):
-        g.content = _format_help(HELP[action])
+        g.content = _format_help(help_text()[action])
         g.message = ""
 
     # Keep link help ahead of generic help; never register or intercept open.

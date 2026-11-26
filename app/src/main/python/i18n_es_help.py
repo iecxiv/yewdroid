@@ -117,11 +117,11 @@ CATALOG = {
     # links
     "Opening Links": "Apertura de enlaces",
     "{} : Opening Links": "{} : Apertura de enlaces",
-    "openwith N - open result N's link in a compatible app.": "openwith N - abre el enlace del resultado N en una app compatible.",
+    "{} - open result N's link in a compatible app.": "{} - abre el enlace del resultado N en una app compatible.",
     "N refers to a video or YouTube playlist in the current list.": "N se refiere a un vídeo o lista de YouTube de la lista actual.",
     "Sharing Links": "Compartir enlaces",
     "{} : Sharing Links": "{} : Compartir enlaces",
-    "share N - open the share chooser for result N's link.": "share N - abre el selector de compartir para el enlace del resultado N.",
+    "{} - open the share chooser for result N's link.": "{} - abre el selector de compartir para el enlace del resultado N.",
     "Shares the YouTube link, not a downloaded file.": "Comparte el enlace de YouTube, no un archivo descargado.",
     "Nothing is sent automatically: confirm in the app you choose.": "No se envía nada automáticamente: confirma en la app que elijas.",
 }
