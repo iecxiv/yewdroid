@@ -35,6 +35,10 @@ class DownloadService : Service() {
     private val tracked = HashSet<Int>()
     private val announced = HashSet<Int>()
 
+    override fun attachBaseContext(base: Context) {
+        super.attachBaseContext(AppLanguage.wrap(base))
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

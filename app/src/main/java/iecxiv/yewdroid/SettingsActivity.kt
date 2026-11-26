@@ -68,6 +68,10 @@ private val COOKIES_GUIDE = listOf(
 class SettingsActivity : ComponentActivity() {
     private var resumes by mutableIntStateOf(0)
 
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(AppLanguage.wrap(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent { SettingsScreen(resumes) { finish() } }
@@ -181,6 +185,7 @@ private fun SettingsScreen(resumes: Int, onBack: () -> Unit) {
     val savedLanguage by languageFlow.collectAsState(initial = null)
     var selectedLanguage by remember { mutableStateOf<String?>(null) }
     val language = selectedLanguage ?: savedLanguage
+    var appLanguage by remember { mutableStateOf(AppLanguage.saved(ctx)) }
     val sessionStarted by TerminalHub.sessionStarted.collectAsState()
     val translationAvailable by TerminalHub.translationAvailable.collectAsState()
     var cookiesSaved by remember { mutableStateOf(cookiesFile(ctx).isFile) }
@@ -228,7 +233,44 @@ private fun SettingsScreen(resumes: Int, onBack: () -> Unit) {
             Text(stringResource(R.string.settings_title), style = title)
         }
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
-            Text(stringResource(R.string.settings_permissions_section), style = section, modifier = Modifier.padding(vertical = 8.dp))
+            Text(stringResource(R.string.applang_section), style = section, modifier = Modifier.padding(vertical = 8.dp))
+            Text(stringResource(R.string.applang_desc), style = note)
+            val appLanguages = listOf(AppLanguage.SYSTEM to stringResource(R.string.applang_system)) + AppLanguage.SUPPORTED
+            appLanguages.forEach { (value, label) ->
+                Row(
+                    Modifier.fillMaxWidth()
+                        .selectable(
+                            selected = appLanguage == value,
+                            role = Role.RadioButton,
+                            onClick = {
+                                if (appLanguage != value) {
+                                    appLanguage = value
+                                    AppLanguage.save(ctx, value)
+                                    // The terminal output follows the device language when set to "system".
+                                    if (language == "system") TerminalHub.setLanguage(ctx, "system")
+                                    ctx.findActivity()?.recreate()
+                                }
+                            }
+                        )
+                        .padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = appLanguage == value,
+                        onClick = null,
+                        colors = RadioButtonDefaults.colors(selectedColor = ACCENT, unselectedColor = FG)
+                    )
+                    Text(label, style = body, modifier = Modifier.padding(start = 12.dp))
+                }
+            }
+            if (appLanguage == AppLanguage.SYSTEM && !AppLanguage.systemSupported()) {
+                Text(stringResource(R.string.applang_unsupported), style = note)
+            }
+
+            Text(
+                stringResource(R.string.settings_permissions_section), style = section,
+                modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+            )
             PermissionRow(
                 stringResource(R.string.permission_notifications),
                 stringResource(R.string.permission_notifications_desc),
