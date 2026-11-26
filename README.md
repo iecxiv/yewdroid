@@ -87,7 +87,7 @@ El cambio de una dependencia no sustituye la compilación y validación en un di
 
 ### Estado de validación (26 de noviembre de 2026)
 
-Comprobado por el autor en un dispositivo: la compilación de FFmpeg y la conversión de audio al descargar (queda solo el archivo convertido), la vista de lista con quitar y añadir elementos, la recuperación de los resultados de Buscar, la recarga de la lista abierta tras añadir, el selector de idioma de la app y el editor de preajustes traducido.
+Comprobado en un dispositivo: la compilación de FFmpeg y la conversión de audio al descargar (queda solo el archivo convertido), la vista de lista con quitar y añadir elementos, la recuperación de los resultados de Buscar, la recarga de la lista abierta tras añadir, el selector de idioma de la app y el editor de preajustes traducido.
 
 Sin comprobar: el interruptor «Conservar el audio original» (posterior a esas pruebas), la exportación de audio en Android 8 y 9 (la corrección procede de leer el código, no de una prueba), los siete perfiles de codificación, la alineación de 16 KB de los binarios y la compatibilidad de licencias de una APK concreta. Las notificaciones de descarga, la persistencia de su lista, las opciones de Ajustes y el cierre desde recientes tampoco constan como confirmados.
 
@@ -186,7 +186,7 @@ Changing a dependency does not replace building and testing on a device. A `Fail
 
 ### Validation status (26 November 2026)
 
-Checked by the author on a device: the FFmpeg build and audio conversion on download (only the converted file remains), the playlist view with removing and adding entries, recovery of the Search results, reloading the open playlist after adding, the app language selector and the translated preset editor.
+Checked on a device: the FFmpeg build and audio conversion on download (only the converted file remains), the playlist view with removing and adding entries, recovery of the Search results, reloading the open playlist after adding, the app language selector and the translated preset editor.
 
 Not checked: the "Keep the original audio" switch (added after those tests), audio export on Android 8 and 9 (the fix comes from reading the code, not from a test), the seven encoding profiles, the 16 KB alignment of the binaries and license compatibility of a specific APK. Download notifications, persistence of their list, the Settings options and closing from recents are not recorded as confirmed either.
 
