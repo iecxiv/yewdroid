@@ -13,11 +13,13 @@ Modified version of yewtube, adapted and simplified for native Android use.
 ### Características
 
 - Cliente nativo con pestañas Buscar, Listas, Historial y Descargas, además de la terminal Compose con colores ANSI y entrada de comandos.
+- Los resultados de Buscar se conservan en memoria al pasar a Historial o a una lista: al volver no se repite la búsqueda. Si esa copia se pierde (por ejemplo, tras reiniciarse el proceso), se repite la última búsqueda.
+- Listas locales: al abrir una, se muestra dentro de la pestaña Listas, sin cuadro de búsqueda y con flecha para volver. Se pueden quitar elementos de la lista abierta y añadir resultados a una lista existente o nueva; los cambios se guardan al momento.
 - Reproducción mediante un servicio multimedia con controles en la notificación y la pantalla de bloqueo. Pasar la app a segundo plano no la detiene; cerrarla desde la lista de recientes detiene la reproducción y quita la notificación.
 - Descargas de audio y de vídeo con selector de calidad (yt-dlp), cola y pestaña Descargas. Un servicio en primer plano muestra el progreso con botón de cancelar y avisa al terminar. Los archivos se guardan en `Descargas/YewDroid`.
 - La lista de descargas se conserva al cerrar la app (`downloads.json` en el almacenamiento privado) hasta que se quita a mano, con «Quitar terminadas» o con el botón de cada fila. Quitar una fila no borra el archivo guardado. Una descarga en curso al cerrar la app queda como «Interrumpida».
 - Conversión de las descargas de audio con el preajuste de codificación elegido en Ajustes (por ejemplo mp3), mediante FFmpeg empaquetado en la app. Ver [FFMPEG-INTEGRATION.md](FFMPEG-INTEGRATION.md).
-- Ajustes en la interfaz: permisos, idioma de la terminal, opciones de yewtube (formatos de audio y vídeo, resolución máxima, orden, columnas, mostrar vídeo, repetir, historial), preajustes de codificación con su editor, y cookies de YouTube importables.
+- Ajustes en la interfaz: idioma de la app (Sistema, English o Español; «Sistema» sigue el del dispositivo si está traducido y, si no, usa inglés), permisos, idioma de la terminal, opciones de yewtube (formatos de audio y vídeo, resolución máxima, orden, columnas, mostrar vídeo, repetir, historial), preajustes de codificación con su editor, y cookies de YouTube importables.
 - Apertura de enlaces en aplicaciones Android y uso del selector de compartir.
 - Adaptadores Python que ajustan el comportamiento de yewtube en tiempo de ejecución; no es un reemplazo independiente de ese proyecto.
 - QuickJS-NG integrado para los desafíos JavaScript utilizados por yt-dlp.
@@ -39,6 +41,8 @@ h                  Ayuda general
 ```
 
 `open` se reserva para las playlists locales. `openwith` y `share` utilizan la lista actual de vídeos o playlists de YouTube. Compartir no envía nada automáticamente: la confirmación se realiza en la aplicación elegida.
+
+La interfaz nativa usa además comandos internos, no pensados para escribirse a mano: `pladd NOMBRE N` y `plrm NOMBRE N` (añadir o quitar un elemento de una lista guardada), `plreload NOMBRE`, y `viewstash` y `viewrestore` (guardar y recuperar los resultados de Buscar).
 
 ### Requisitos y compilación
 
@@ -83,7 +87,9 @@ El cambio de una dependencia no sustituye la compilación y validación en un di
 
 ### Estado de validación
 
-No todo está probado en un dispositivo. Está pendiente de validar: la compilación completa de FFmpeg y la conversión de audio, las notificaciones de descarga, la persistencia de la lista, las opciones de Ajustes y el cierre desde recientes. La conversión solo cubre audio; si el preajuste no admite la extensión descargada, el cliente guarda el original sin avisar.
+No todo está probado en un dispositivo. Está pendiente de validar: la compilación completa de FFmpeg y la conversión de audio, las notificaciones de descarga, la persistencia de la lista de descargas, las opciones de Ajustes, el cierre desde recientes, la vista de lista con quitar y añadir elementos, la recuperación de los resultados de Buscar y el selector de idioma de la app.
+
+Limitaciones conocidas: la conversión solo cubre audio, su progreso es indeterminado y, si el preajuste no admite la extensión descargada, el cliente guarda el original sin avisar. Los avisos de áñadido y quitado de las listas dependen del catálogo de traducción de yewtube y pueden salir en inglés. En Android 8 y 9 las descargas no se exportan a la carpeta pública Descargas.
 
 ### Licencia
 
@@ -104,11 +110,13 @@ Modified version of yewtube, adapted and simplified for native Android use.
 ### Features
 
 - Native client with Search, Playlists, History and Downloads tabs, plus the Compose terminal with ANSI colors and command input.
+- Search results are kept in memory when you switch to History or a playlist, so returning does not repeat the search. If that copy is lost (for example after the process restarts), the last search is repeated.
+- Local playlists: opening one shows it inside the Playlists tab, without the search box and with a back arrow. You can remove entries from the open playlist and add results to an existing or new playlist; changes are saved immediately.
 - Playback through a media service with notification and lock-screen controls. Moving the app to the background does not stop it; closing it from the recents list stops playback and removes the notification.
 - Audio and video downloads with a quality picker (yt-dlp), a queue and a Downloads tab. A foreground service shows progress with a cancel button and announces the result. Files are saved to `Downloads/YewDroid`.
 - The download list survives closing the app (`downloads.json` in private storage) until removed manually, with "Clear finished" or each row's button. Removing a row does not delete the saved file. A download that was running when the app closed shows as "Interrupted".
 - Audio downloads can be converted with the encoding preset selected in Settings (for example mp3), using the FFmpeg packaged in the app. See [FFMPEG-INTEGRATION.md](FFMPEG-INTEGRATION.md).
-- Settings in the interface: permissions, terminal language, yewtube options (audio and video format, maximum resolution, order, columns, show video, repeat, history), encoding presets with their editor, and importable YouTube cookies.
+- Settings in the interface: app language (System, English or Español; "System" follows the device language when it is translated and otherwise uses English), permissions, terminal language, yewtube options (audio and video format, maximum resolution, order, columns, show video, repeat, history), encoding presets with their editor, and importable YouTube cookies.
 - Link opening in Android applications and access to the Android share chooser.
 - Python adapters that adjust yewtube at runtime; this is not an independent replacement for that project.
 - Embedded QuickJS-NG for the JavaScript challenges used by yt-dlp.
@@ -130,6 +138,8 @@ h                  General help
 ```
 
 `open` is reserved for local playlists. `openwith` and `share` use the current video or YouTube playlist list. Sharing never sends anything automatically: confirmation takes place in the selected application.
+
+The native interface also uses internal commands that are not meant to be typed by hand: `pladd NAME N` and `plrm NAME N` (add or remove an entry of a saved playlist), `plreload NAME`, and `viewstash` and `viewrestore` (keep and recover the Search results).
 
 ### Requirements and building
 
@@ -174,7 +184,9 @@ Changing a dependency does not replace building and testing on a device. A `Fail
 
 ### Validation status
 
-Not everything has been tested on a device. Still to validate: the full FFmpeg build and audio conversion, download notifications, list persistence, the Settings options and closing from recents. Conversion covers audio only; if the preset does not accept the downloaded extension, the client keeps the original without a warning.
+Not everything has been tested on a device. Still to validate: the full FFmpeg build and audio conversion, download notifications, persistence of the download list, the Settings options, closing from recents, the playlist view with removing and adding entries, recovery of the Search results and the app language selector.
+
+Known limitations: conversion covers audio only, its progress is indeterminate and, if the preset does not accept the downloaded extension, the client keeps the original without a warning. The added and removed messages of playlists depend on yewtube's translation catalogue and may appear in English. On Android 8 and 9, downloads are not exported to the public Downloads folder.
 
 ### License
 
