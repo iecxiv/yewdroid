@@ -156,40 +156,100 @@ internal fun ConfigSettings(resumes: Int) {
         scope.launch { withContext(Dispatchers.Default) { runCatching { saveKeepOriginal(value) } } }
     }
 
-    val section = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp, color = ACCENT)
     val body = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 15.sp, color = FG)
     val note = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = Color.Gray)
     val current = state
 
-    Text(
-        stringResource(R.string.cfgui_section), style = section,
-        modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
-    )
-    if (current == null) {
-        Text(stringResource(if (failed) R.string.cfgui_failed else R.string.cfgui_wait), style = note)
-        return
-    }
-    current.options.forEach { option ->
-        val labels = LABELS[option.key] ?: return@forEach
-        val isFlag = option.kind == "bool"
-        Row(
-            Modifier.fillMaxWidth()
-                .clickable { if (isFlag) change(option.key, if (option.flag) "0" else "1") else editing = option }
-                .padding(vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(stringResource(labels.first), style = body)
-                Text(stringResource(labels.second), style = note)
-                if (!isFlag) {
-                    val shown = if (option.kind == "columns") option.value else optionLabel(option.key, option.value)
-                    Text(shown, style = body.copy(color = ACCENT), modifier = Modifier.padding(top = 2.dp))
+    SettingsSection(stringResource(R.string.cfgui_section)) {
+        if (current == null) {
+            Text(stringResource(if (failed) R.string.cfgui_failed else R.string.cfgui_wait), style = note)
+        } else {
+            current.options.forEach { option ->
+                val labels = LABELS[option.key] ?: return@forEach
+                val isFlag = option.kind == "bool"
+                Row(
+                    Modifier.fillMaxWidth()
+                        .clickable { if (isFlag) change(option.key, if (option.flag) "0" else "1") else editing = option }
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(labels.first), style = body)
+                        Text(stringResource(labels.second), style = note)
+                        if (!isFlag) {
+                            val shown = if (option.kind == "columns") option.value else optionLabel(option.key, option.value)
+                            Text(shown, style = body.copy(color = ACCENT), modifier = Modifier.padding(top = 2.dp))
+                        }
+                    }
+                    if (isFlag) {
+                        Switch(
+                            checked = option.flag,
+                            onCheckedChange = null,
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = BG,
+                                checkedTrackColor = ACCENT,
+                                checkedBorderColor = ACCENT,
+                                uncheckedThumbColor = FG,
+                                uncheckedTrackColor = Color(0xFF2A2A2A),
+                                uncheckedBorderColor = Color(0xFF555555)
+                            )
+                        )
+                    }
                 }
             }
-            if (isFlag) {
+        }
+    }
+
+    if (current != null) {
+        SettingsSection(stringResource(R.string.cfgui_encoding_section)) {
+            Text(stringResource(R.string.cfgui_encoding_desc), style = note)
+            Text(
+                stringResource(if (current.ffmpeg) R.string.cfgui_ffmpeg_on else R.string.cfgui_ffmpeg_off),
+                style = note.copy(color = if (current.ffmpeg) ACCENT else ERROR),
+                modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
+            )
+            current.encoders.forEach { preset ->
+                Row(
+                    Modifier.fillMaxWidth()
+                        .selectable(
+                            selected = current.encoder == preset.index,
+                            role = Role.RadioButton,
+                            onClick = { change("ENCODER", preset.index.toString()) }
+                        )
+                        .padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = current.encoder == preset.index,
+                        onClick = null,
+                        colors = RadioButtonDefaults.colors(selectedColor = ACCENT, unselectedColor = FG)
+                    )
+                    Column(Modifier.padding(start = 12.dp)) {
+                        Text(preset.name, style = body)
+                        if (preset.ext.isNotEmpty() && preset.ext != "COPY") Text(".${preset.ext}", style = note)
+                    }
+                }
+            }
+            // Keeping the original only makes sense when a preset (not "None") converts the download.
+            val converting = current.encoders.firstOrNull { it.index == current.encoder }
+                ?.ext?.let { it.isNotEmpty() && it != "COPY" } == true
+            Row(
+                Modifier.fillMaxWidth()
+                    .clickable(enabled = converting) { changeKeepOriginal(!keepOriginal) }
+                    .padding(top = 12.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        stringResource(R.string.cfgui_keep_original),
+                        style = if (converting) body else body.copy(color = Color.Gray)
+                    )
+                    Text(stringResource(R.string.cfgui_keep_original_desc), style = note)
+                }
                 Switch(
-                    checked = option.flag,
+                    checked = keepOriginal && converting,
                     onCheckedChange = null,
+                    enabled = converting,
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = BG,
                         checkedTrackColor = ACCENT,
@@ -200,80 +260,17 @@ internal fun ConfigSettings(resumes: Int) {
                     )
                 )
             }
-        }
-    }
-
-    Text(
-        stringResource(R.string.cfgui_encoding_section), style = section,
-        modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
-    )
-    Text(stringResource(R.string.cfgui_encoding_desc), style = note)
-    Text(
-        stringResource(if (current.ffmpeg) R.string.cfgui_ffmpeg_on else R.string.cfgui_ffmpeg_off),
-        style = note.copy(color = if (current.ffmpeg) ACCENT else ERROR),
-        modifier = Modifier.padding(top = 4.dp)
-    )
-    current.encoders.forEach { preset ->
-        Row(
-            Modifier.fillMaxWidth()
-                .selectable(
-                    selected = current.encoder == preset.index,
-                    role = Role.RadioButton,
-                    onClick = { change("ENCODER", preset.index.toString()) }
-                )
-                .padding(vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            RadioButton(
-                selected = current.encoder == preset.index,
-                onClick = null,
-                colors = RadioButtonDefaults.colors(selectedColor = ACCENT, unselectedColor = FG)
-            )
-            Column(Modifier.padding(start = 12.dp)) {
-                Text(preset.name, style = body)
-                if (preset.ext.isNotEmpty() && preset.ext != "COPY") Text(".${preset.ext}", style = note)
+            Row {
+                TextButton(
+                    onClick = { ctx.startActivity(Intent(ctx, EncoderEditorActivity::class.java)) },
+                    colors = ButtonDefaults.textButtonColors(contentColor = ACCENT)
+                ) { Text(stringResource(R.string.cfgui_edit_presets)) }
+                TextButton(
+                    onClick = { resetting = true },
+                    colors = ButtonDefaults.textButtonColors(contentColor = ACCENT)
+                ) { Text(stringResource(R.string.cfgui_reset)) }
             }
         }
-    }
-    // Keeping the original only makes sense when a preset (not "None") converts the download.
-    val converting = current.encoders.firstOrNull { it.index == current.encoder }
-        ?.ext?.let { it.isNotEmpty() && it != "COPY" } == true
-    Row(
-        Modifier.fillMaxWidth()
-            .clickable(enabled = converting) { changeKeepOriginal(!keepOriginal) }
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                stringResource(R.string.cfgui_keep_original),
-                style = if (converting) body else body.copy(color = Color.Gray)
-            )
-            Text(stringResource(R.string.cfgui_keep_original_desc), style = note)
-        }
-        Switch(
-            checked = keepOriginal && converting,
-            onCheckedChange = null,
-            enabled = converting,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = BG,
-                checkedTrackColor = ACCENT,
-                checkedBorderColor = ACCENT,
-                uncheckedThumbColor = FG,
-                uncheckedTrackColor = Color(0xFF2A2A2A),
-                uncheckedBorderColor = Color(0xFF555555)
-            )
-        )
-    }
-    Row {
-        TextButton(
-            onClick = { ctx.startActivity(Intent(ctx, EncoderEditorActivity::class.java)) },
-            colors = ButtonDefaults.textButtonColors(contentColor = ACCENT)
-        ) { Text(stringResource(R.string.cfgui_edit_presets)) }
-        TextButton(
-            onClick = { resetting = true },
-            colors = ButtonDefaults.textButtonColors(contentColor = ACCENT)
-        ) { Text(stringResource(R.string.cfgui_reset)) }
     }
 
     editing?.let { option ->

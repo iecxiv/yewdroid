@@ -65,6 +65,21 @@ private val COOKIES_GUIDE = listOf(
     R.string.cookies_info_5
 )
 
+/**
+ * One block of the Settings screen: a divider, the heading and the content indented under it, so the
+ * sections can be told apart at a glance.
+ */
+@Composable
+internal fun SettingsSection(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Box(Modifier.fillMaxWidth().padding(top = 20.dp).height(1.dp).background(Color(0xFF2A2A2A)))
+    Text(
+        title,
+        style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp, color = ACCENT),
+        modifier = Modifier.padding(top = 12.dp, bottom = 8.dp)
+    )
+    Column(Modifier.fillMaxWidth().padding(start = 12.dp, bottom = 4.dp), content = content)
+}
+
 class SettingsActivity : ComponentActivity() {
     private var resumes by mutableIntStateOf(0)
 
@@ -224,7 +239,6 @@ private fun SettingsScreen(resumes: Int, onBack: () -> Unit) {
     }
 
     val title = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 20.sp, color = ACCENT)
-    val section = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp, color = ACCENT)
     val body = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 15.sp, color = FG)
     val note = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = Color.Gray)
     Column(Modifier.fillMaxSize().background(BG).systemBarsPadding()) {
@@ -233,120 +247,115 @@ private fun SettingsScreen(resumes: Int, onBack: () -> Unit) {
             Text(stringResource(R.string.settings_title), style = title)
         }
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
-            Text(stringResource(R.string.applang_section), style = section, modifier = Modifier.padding(vertical = 8.dp))
-            Text(stringResource(R.string.applang_desc), style = note)
-            val appLanguages = listOf(AppLanguage.SYSTEM to stringResource(R.string.applang_system)) + AppLanguage.SUPPORTED
-            appLanguages.forEach { (value, label) ->
-                Row(
-                    Modifier.fillMaxWidth()
-                        .selectable(
-                            selected = appLanguage == value,
-                            role = Role.RadioButton,
-                            onClick = {
-                                if (appLanguage != value) {
-                                    appLanguage = value
-                                    AppLanguage.save(ctx, value)
-                                    // The terminal output follows the device language when set to "system".
-                                    if (language == "system") TerminalHub.setLanguage(ctx, "system")
-                                    ctx.findActivity()?.recreate()
-                                }
-                            }
-                        )
-                        .padding(vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    RadioButton(
-                        selected = appLanguage == value,
-                        onClick = null,
-                        colors = RadioButtonDefaults.colors(selectedColor = ACCENT, unselectedColor = FG)
-                    )
-                    Text(label, style = body, modifier = Modifier.padding(start = 12.dp))
-                }
-            }
-            if (appLanguage == AppLanguage.SYSTEM && !AppLanguage.systemSupported()) {
-                Text(stringResource(R.string.applang_unsupported), style = note)
-            }
-
-            Text(
-                stringResource(R.string.settings_permissions_section), style = section,
-                modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
-            )
-            PermissionRow(
-                stringResource(R.string.permission_notifications),
-                stringResource(R.string.permission_notifications_desc),
-                notificationsAllowed
-            ) { allowNotifications() }
-            PermissionRow(
-                stringResource(R.string.permission_battery),
-                stringResource(R.string.permission_battery_desc),
-                batteryAllowed
-            ) { allowBattery() }
-            TextButton(
-                onClick = { openFirst(ctx, appDetails(ctx)) },
-                colors = ButtonDefaults.textButtonColors(contentColor = ACCENT)
-            ) { Text(stringResource(R.string.settings_open_system)) }
-
-            if (language != null) {
-                Text(
-                    stringResource(R.string.language_section), style = section,
-                    modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
-                )
-                Text(stringResource(R.string.language_section_desc), style = note)
-                LANGUAGES.forEach { (value, label) ->
+            SettingsSection(stringResource(R.string.applang_section)) {
+                Text(stringResource(R.string.applang_desc), style = note)
+                val appLanguages = listOf(AppLanguage.SYSTEM to stringResource(R.string.applang_system)) + AppLanguage.SUPPORTED
+                appLanguages.forEach { (value, label) ->
                     Row(
                         Modifier.fillMaxWidth()
                             .selectable(
-                                selected = language == value,
+                                selected = appLanguage == value,
                                 role = Role.RadioButton,
                                 onClick = {
-                                    selectedLanguage = value
-                                    TerminalHub.setLanguage(ctx, value)
+                                    if (appLanguage != value) {
+                                        appLanguage = value
+                                        AppLanguage.save(ctx, value)
+                                        // The terminal output follows the device language when set to "system".
+                                        if (language == "system") TerminalHub.setLanguage(ctx, "system")
+                                        ctx.findActivity()?.recreate()
+                                    }
                                 }
                             )
                             .padding(vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         RadioButton(
-                            selected = language == value,
+                            selected = appLanguage == value,
                             onClick = null,
                             colors = RadioButtonDefaults.colors(selectedColor = ACCENT, unselectedColor = FG)
                         )
-                        Text(stringResource(label), style = body, modifier = Modifier.padding(start = 12.dp))
+                        Text(label, style = body, modifier = Modifier.padding(start = 12.dp))
                     }
                 }
-                if (sessionStarted && !translationAvailable) {
-                    Text(stringResource(R.string.language_unavailable), style = note)
+                if (appLanguage == AppLanguage.SYSTEM && !AppLanguage.systemSupported()) {
+                    Text(stringResource(R.string.applang_unsupported), style = note)
+                }
+            }
+
+            SettingsSection(stringResource(R.string.settings_permissions_section)) {
+                PermissionRow(
+                    stringResource(R.string.permission_notifications),
+                    stringResource(R.string.permission_notifications_desc),
+                    notificationsAllowed
+                ) { allowNotifications() }
+                PermissionRow(
+                    stringResource(R.string.permission_battery),
+                    stringResource(R.string.permission_battery_desc),
+                    batteryAllowed
+                ) { allowBattery() }
+                TextButton(
+                    onClick = { openFirst(ctx, appDetails(ctx)) },
+                    colors = ButtonDefaults.textButtonColors(contentColor = ACCENT)
+                ) { Text(stringResource(R.string.settings_open_system)) }
+            }
+
+            if (language != null) {
+                SettingsSection(stringResource(R.string.language_section)) {
+                    Text(stringResource(R.string.language_section_desc), style = note)
+                    LANGUAGES.forEach { (value, label) ->
+                        Row(
+                            Modifier.fillMaxWidth()
+                                .selectable(
+                                    selected = language == value,
+                                    role = Role.RadioButton,
+                                    onClick = {
+                                        selectedLanguage = value
+                                        TerminalHub.setLanguage(ctx, value)
+                                    }
+                                )
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = language == value,
+                                onClick = null,
+                                colors = RadioButtonDefaults.colors(selectedColor = ACCENT, unselectedColor = FG)
+                            )
+                            Text(stringResource(label), style = body, modifier = Modifier.padding(start = 12.dp))
+                        }
+                    }
+                    if (sessionStarted && !translationAvailable) {
+                        Text(stringResource(R.string.language_unavailable), style = note)
+                    }
                 }
             }
 
             ConfigSettings(resumes)
 
-            Text(
-                stringResource(R.string.cookies_section), style = section,
-                modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
-            )
-            Text(stringResource(R.string.cookies_desc), style = note)
-            Text(
-                stringResource(if (cookiesSaved) R.string.cookies_on else R.string.cookies_off),
-                style = body, modifier = Modifier.padding(top = 8.dp)
-            )
-            if (cookiesInvalid) {
-                Text(stringResource(R.string.cookies_invalid), style = note.copy(color = ERROR))
-            }
-            Row {
-                TextButton(
-                    onClick = { cookiesGuide = true },
-                    colors = ButtonDefaults.textButtonColors(contentColor = ACCENT)
-                ) { Text(stringResource(R.string.cookies_import)) }
-                if (cookiesSaved) {
+            SettingsSection(stringResource(R.string.cookies_section)) {
+                Text(stringResource(R.string.cookies_desc), style = note)
+                Text(
+                    stringResource(if (cookiesSaved) R.string.cookies_on else R.string.cookies_off),
+                    style = body, modifier = Modifier.padding(top = 8.dp)
+                )
+                if (cookiesInvalid) {
+                    Text(stringResource(R.string.cookies_invalid), style = note.copy(color = ERROR))
+                }
+                Row {
                     TextButton(
-                        onClick = {
-                            cookiesFile(ctx).delete()
-                            cookiesSaved = cookiesFile(ctx).isFile
-                            cookiesInvalid = false
-                        },
+                        onClick = { cookiesGuide = true },
                         colors = ButtonDefaults.textButtonColors(contentColor = ACCENT)
-                    ) { Text(stringResource(R.string.cookies_remove)) }
+                    ) { Text(stringResource(R.string.cookies_import)) }
+                    if (cookiesSaved) {
+                        TextButton(
+                            onClick = {
+                                cookiesFile(ctx).delete()
+                                cookiesSaved = cookiesFile(ctx).isFile
+                                cookiesInvalid = false
+                            },
+                            colors = ButtonDefaults.textButtonColors(contentColor = ACCENT)
+                        ) { Text(stringResource(R.string.cookies_remove)) }
+                    }
                 }
             }
             Spacer(Modifier.height(24.dp))
