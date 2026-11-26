@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="applang_section">Idioma de la app</string>
+    <string name="applang_desc">Idioma de los menús, diálogos y notificaciones. «Sistema» sigue el idioma del dispositivo si la app está traducida a él.</string>
+    <string name="applang_system">Sistema</string>
+    <string name="applang_unsupported">El idioma de tu dispositivo aún no está disponible; se usa inglés.</string>
+</resources>

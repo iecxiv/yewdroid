@@ -1,6 +1,7 @@
 package iecxiv.yewdroid
 
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -32,6 +33,10 @@ class NavPlayer(p: Player) : ForwardingPlayer(p) {
 @UnstableApi
 class PlaybackService : MediaSessionService() {
     private var session: MediaSession? = null
+
+    override fun attachBaseContext(base: Context) {
+        super.attachBaseContext(AppLanguage.wrap(base))
+    }
 
     override fun onCreate() {
         super.onCreate()

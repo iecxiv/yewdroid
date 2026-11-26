@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="applang_section">App language</string>
+    <string name="applang_desc">Language of menus, dialogs and notifications. "System" follows the device language when the app is translated into it.</string>
+    <string name="applang_system">System</string>
+    <string name="applang_unsupported">Your device language is not available yet; English is used.</string>
+</resources>
