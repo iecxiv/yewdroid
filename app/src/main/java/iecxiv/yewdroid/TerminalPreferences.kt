@@ -2,6 +2,7 @@ package iecxiv.yewdroid
 
 import android.content.Context
 import android.util.Log
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.floatPreferencesKey
@@ -25,10 +26,12 @@ object TerminalPreferences {
     private const val MAX_HISTORY = 500
     private val fontSize = floatPreferencesKey("font_size_sp")
     private val commandHistory = stringPreferencesKey("command_history_json")
+    private val terminalModeKey = booleanPreferencesKey("terminal_mode")
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val writes = Channel<Pair<Context, Float>>(Channel.CONFLATED)
     // Append commands in order: unlike zoom changes, commands must not be conflated.
     private val historyWrites = Channel<Pair<Context, String>>(Channel.UNLIMITED)
+    private val modeWrites = Channel<Pair<Context, Boolean>>(Channel.CONFLATED)
 
     init {
         scope.launch {
@@ -54,6 +57,16 @@ object TerminalPreferences {
                 }
             }
         }
+        scope.launch {
+            for ((context, enabled) in modeWrites) {
+                try {
+                    context.terminalDataStore.edit { it[terminalModeKey] = enabled }
+                } catch (error: IOException) {
+                    Log.e("TerminalPreferences", "Cannot save terminal mode", error)
+                    TerminalHub.onWrite("\n[settings] Could not save the mode.\n")
+                }
+            }
+        }
     }
 
     fun zoom(context: Context): Flow<Float?> = context.applicationContext.terminalDataStore.data
@@ -70,6 +83,19 @@ object TerminalPreferences {
 
     fun save(context: Context, size: Float) {
         if (size.isFinite()) writes.trySend(context.applicationContext to size.coerceIn(7f, 20f))
+    }
+
+    fun terminalMode(context: Context): Flow<Boolean?> = context.applicationContext.terminalDataStore.data
+        .catch { error ->
+            if (error is IOException) {
+                Log.e("TerminalPreferences", "Cannot read terminal mode", error)
+                emit(emptyPreferences())
+            } else throw error
+        }
+        .map { values -> values[terminalModeKey] ?: true }
+
+    fun saveTerminalMode(context: Context, enabled: Boolean) {
+        modeWrites.trySend(context.applicationContext to enabled)
     }
 
     fun history(context: Context): Flow<List<String>?> = context.applicationContext.terminalDataStore.data

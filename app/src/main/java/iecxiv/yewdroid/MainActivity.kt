@@ -38,6 +38,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -54,6 +56,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -98,6 +101,10 @@ fun TerminalScreen() {
     val savedZoom by zoomFlow.collectAsState(initial = null)
     val historyFlow = remember(ctx.applicationContext) { TerminalPreferences.history(ctx.applicationContext) }
     val savedHistory by historyFlow.collectAsState(initial = null)
+    val modeFlow = remember(ctx.applicationContext) { TerminalPreferences.terminalMode(ctx.applicationContext) }
+    val savedMode by modeFlow.collectAsState(initial = null)
+    var selectedMode by remember { mutableStateOf<Boolean?>(null) }
+    val terminalMode = selectedMode ?: savedMode
     var selectedZoom by remember { mutableStateOf<Float?>(null) }
     val currentZoom = selectedZoom ?: savedZoom
     val uiStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = FG)
@@ -128,7 +135,7 @@ fun TerminalScreen() {
             askBatteryExemption()
         }
     }
-    if (currentZoom == null || savedHistory == null) {
+    if (currentZoom == null || savedHistory == null || terminalMode == null) {
         Box(Modifier.fillMaxSize().background(BG).systemBarsPadding(), contentAlignment = Alignment.Center) {
             Text("Loading terminal...", style = uiStyle)
         }
@@ -186,10 +193,28 @@ fun TerminalScreen() {
     Column(Modifier.fillMaxSize().background(BG).systemBarsPadding().imePadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("YewDroid", color = ACCENT, style = uiStyle, modifier = Modifier.weight(1f))
-            Text("A-", color = FG, style = uiStyle, modifier = Modifier
-                .clickableNoRipple { changeZoom(-1f) }.padding(12.dp))
-            Text("A+", color = FG, style = uiStyle, modifier = Modifier
-                .clickableNoRipple { changeZoom(1f) }.padding(12.dp))
+            if (terminalMode) {
+                Text("A-", color = FG, style = uiStyle, modifier = Modifier
+                    .clickableNoRipple { changeZoom(-1f) }.padding(12.dp))
+                Text("A+", color = FG, style = uiStyle, modifier = Modifier
+                    .clickableNoRipple { changeZoom(1f) }.padding(12.dp))
+            }
+            Text("Terminal", color = FG, style = uiStyle.copy(fontSize = 12.sp), modifier = Modifier.padding(end = 6.dp))
+            Switch(
+                checked = terminalMode,
+                onCheckedChange = {
+                    selectedMode = it
+                    TerminalPreferences.saveTerminalMode(ctx, it)
+                },
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = BG,
+                    checkedTrackColor = ACCENT,
+                    checkedBorderColor = ACCENT,
+                    uncheckedThumbColor = FG,
+                    uncheckedTrackColor = Color(0xFF2A2A2A),
+                    uncheckedBorderColor = Color(0xFF555555)
+                )
+            )
             CtrlBtn(Icons.Filled.Settings) { ctx.startActivity(Intent(ctx, SettingsActivity::class.java)) }
         }
 
@@ -225,25 +250,34 @@ fun TerminalScreen() {
             }
         }
 
-        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 4.dp).clipToBounds()) {
-            val wPx = with(density) { maxWidth.toPx() }
-            val hPx = with(density) { maxHeight.toPx() }
-            val lineH = with(density) { style.lineHeight.toPx() }.coerceAtLeast(1f)
-            val cols = (wPx / charW).toInt().coerceAtLeast(1)
-            val rows = (hPx / lineH).toInt().coerceAtLeast(1)
-            LaunchedEffect(cols, rows, wPx > 0f && hPx > 0f) {
-                if (wPx > 0f && hPx > 0f) {
-                    delay(100)
-                    TerminalHub.ensureStarted(ctx.applicationContext, cols, rows)
+        if (terminalMode) {
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 4.dp).clipToBounds()) {
+                val wPx = with(density) { maxWidth.toPx() }
+                val hPx = with(density) { maxHeight.toPx() }
+                val lineH = with(density) { style.lineHeight.toPx() }.coerceAtLeast(1f)
+                val cols = (wPx / charW).toInt().coerceAtLeast(1)
+                val rows = (hPx / lineH).toInt().coerceAtLeast(1)
+                LaunchedEffect(cols, rows, wPx > 0f && hPx > 0f) {
+                    if (wPx > 0f && hPx > 0f) {
+                        delay(100)
+                        TerminalHub.ensureStarted(ctx.applicationContext, cols, rows)
+                    }
+                }
+                LaunchedEffect(lines, cols, rows) {
+                    if (lines.isNotEmpty()) listState.scrollToItem(lines.lastIndex)
+                }
+                LazyColumn(modifier = Modifier.fillMaxSize(), state = listState) {
+                    items(lines.size) { i ->
+                        Text(lines[i], modifier = Modifier.fillMaxWidth(), style = style, softWrap = true)
+                    }
                 }
             }
-            LaunchedEffect(lines, cols, rows) {
-                if (lines.isNotEmpty()) listState.scrollToItem(lines.lastIndex)
-            }
-            LazyColumn(modifier = Modifier.fillMaxSize(), state = listState) {
-                items(lines.size) { i ->
-                    Text(lines[i], modifier = Modifier.fillMaxWidth(), style = style, softWrap = true)
-                }
+        } else {
+            Box(Modifier.weight(1f).fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                Text(
+                    "Interactive client coming soon.\nSwitch Terminal on to use yewtube.",
+                    style = uiStyle.copy(textAlign = TextAlign.Center)
+                )
             }
         }
 
@@ -259,7 +293,7 @@ fun TerminalScreen() {
                     CtrlBtn(Icons.Filled.Stop) { TerminalHub.control("stop") }
                 }
             }
-        } else {
+        } else if (terminalMode) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("^C", color = FG, style = uiStyle, modifier = Modifier.padding(8.dp).clickableNoRipple { TerminalHub.interrupt() })
                 BasicTextField(
