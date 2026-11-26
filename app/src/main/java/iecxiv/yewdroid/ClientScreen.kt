@@ -105,7 +105,8 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     var section by rememberSaveable { mutableStateOf(Section.SEARCH) }
     // Which tab produced the results yewtube currently holds (history and playlists replace the search results).
     var resultsFrom by rememberSaveable { mutableStateOf(Section.SEARCH) }
-    var lastQuery by rememberSaveable { mutableStateOf("") }
+    // True once the search results were put aside (viewstash) before History or a playlist replaced them.
+    var searchKept by rememberSaveable { mutableStateOf(false) }
     // Name of the saved playlist shown inside the Playlists tab, if one is open.
     var openedPlaylist by rememberSaveable { mutableStateOf<String?>(null) }
     // Result list being replaced by a new command: hidden until the new results arrive.
@@ -126,8 +127,9 @@ fun ClientScreen(modifier: Modifier = Modifier) {
         else searches.filter { it.contains(typed, ignoreCase = true) && !it.equals(typed, ignoreCase = true) }
     }
     val showHistory = section == Section.SEARCH && focused && suggestions.isNotEmpty()
+    // Compared by content: the list is re-read after each command, so it is a new object with the same items.
     val hideResults = (section == Section.SEARCH && resultsFrom != Section.SEARCH) ||
-        (staleItems != null && state.items === staleItems)
+        (staleItems != null && state.items == staleItems)
     val shownItems = if (hideResults) emptyList() else state.items
     val shownMessage = if (hideResults) "" else state.message
     val shownPages = if (hideResults) 0 else state.pages
@@ -140,18 +142,27 @@ fun ClientScreen(modifier: Modifier = Modifier) {
         TerminalHub.ensureStarted(ctx.applicationContext, CLIENT_COLS, CLIENT_ROWS)
     }
 
-    /** Sends a command that replaces yewtube's result list; the old list stays hidden until the new one arrives. */
+    /**
+     * Sends a command that replaces yewtube's result list. The search results are put aside first so
+     * coming back to Search restores them without a new search; the old list stays hidden until the
+     * new one arrives.
+     */
     fun replaceResults(source: Section, command: String) {
+        val keepSearch = resultsFrom == Section.SEARCH && source != Section.SEARCH
         if (resultsFrom != source) staleItems = state.items
         resultsFrom = source
-        TerminalHub.runCommand(command)
+        if (keepSearch) {
+            searchKept = true
+            TerminalHub.runCommands("viewstash", command)
+        } else {
+            TerminalHub.runCommand(command)
+        }
     }
 
     fun search() {
         val text = query.trim().trimStart('.', '/').trim()
         if (text.isNotEmpty()) {
             focus.clearFocus()
-            lastQuery = text
             TerminalPreferences.addSearch(ctx, text)
             replaceResults(Section.SEARCH, "/$text")
         }
@@ -164,9 +175,11 @@ fun ClientScreen(modifier: Modifier = Modifier) {
         openedPlaylist = null
         if (target == Section.HISTORY && section != Section.HISTORY) {
             replaceResults(Section.HISTORY, "history")
-        } else if (target == Section.SEARCH && resultsFrom != Section.SEARCH && lastQuery.isNotEmpty()) {
-            // yewtube still holds the history or a playlist, so repeat the last search.
-            replaceResults(Section.SEARCH, "/$lastQuery")
+        } else if (target == Section.SEARCH && resultsFrom != Section.SEARCH && searchKept) {
+            // Bring the search results back from memory: no new search.
+            staleItems = state.items
+            resultsFrom = Section.SEARCH
+            TerminalHub.runCommand("viewrestore")
         }
         section = target
     }
@@ -196,10 +209,9 @@ fun ClientScreen(modifier: Modifier = Modifier) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF2A2A2A)))
         if (section == Section.PLAYLISTS && openedPlaylist == null) {
             PlaylistsScreen(
-                onOpened = { playlist ->
-                    if (resultsFrom != Section.PLAYLISTS) staleItems = state.items
-                    resultsFrom = Section.PLAYLISTS
+                onOpen = { playlist ->
                     openedPlaylist = playlist.name
+                    replaceResults(Section.PLAYLISTS, "open ${playlist.n}")
                 },
                 modifier = Modifier.weight(1f).fillMaxWidth()
             )
