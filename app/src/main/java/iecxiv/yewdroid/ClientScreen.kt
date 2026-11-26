@@ -14,6 +14,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
@@ -102,9 +103,11 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     val activeDownloads = downloads.items.count { it.active }
     var query by rememberSaveable { mutableStateOf("") }
     var section by rememberSaveable { mutableStateOf(Section.SEARCH) }
-    // Which tab produced the results yewtube currently holds (history replaces the search results).
+    // Which tab produced the results yewtube currently holds (history and playlists replace the search results).
     var resultsFrom by rememberSaveable { mutableStateOf(Section.SEARCH) }
     var lastQuery by rememberSaveable { mutableStateOf("") }
+    // Name of the saved playlist shown inside the Playlists tab, if one is open.
+    var openedPlaylist by rememberSaveable { mutableStateOf<String?>(null) }
     // Result list being replaced by a new command: hidden until the new results arrive.
     var staleItems by remember { mutableStateOf<List<ClientItem>?>(null) }
     var focused by remember { mutableStateOf(false) }
@@ -123,8 +126,8 @@ fun ClientScreen(modifier: Modifier = Modifier) {
         else searches.filter { it.contains(typed, ignoreCase = true) && !it.equals(typed, ignoreCase = true) }
     }
     val showHistory = section == Section.SEARCH && focused && suggestions.isNotEmpty()
-    val hideResults = section == Section.SEARCH &&
-        (resultsFrom == Section.HISTORY || (staleItems != null && state.items === staleItems))
+    val hideResults = (section == Section.SEARCH && resultsFrom != Section.SEARCH) ||
+        (staleItems != null && state.items === staleItems)
     val shownItems = if (hideResults) emptyList() else state.items
     val shownMessage = if (hideResults) "" else state.message
     val shownPages = if (hideResults) 0 else state.pages
@@ -137,29 +140,33 @@ fun ClientScreen(modifier: Modifier = Modifier) {
         TerminalHub.ensureStarted(ctx.applicationContext, CLIENT_COLS, CLIENT_ROWS)
     }
 
+    /** Sends a command that replaces yewtube's result list; the old list stays hidden until the new one arrives. */
+    fun replaceResults(source: Section, command: String) {
+        if (resultsFrom != source) staleItems = state.items
+        resultsFrom = source
+        TerminalHub.runCommand(command)
+    }
+
     fun search() {
         val text = query.trim().trimStart('.', '/').trim()
         if (text.isNotEmpty()) {
             focus.clearFocus()
-            if (resultsFrom == Section.HISTORY) staleItems = state.items
-            resultsFrom = Section.SEARCH
             lastQuery = text
             TerminalPreferences.addSearch(ctx, text)
-            TerminalHub.runCommand("/$text")
+            replaceResults(Section.SEARCH, "/$text")
         }
     }
 
     fun select(target: Section) {
         focus.clearFocus()
         focused = false
+        // Changing tab (or tapping the Playlists tab again) leaves the open playlist.
+        openedPlaylist = null
         if (target == Section.HISTORY && section != Section.HISTORY) {
-            TerminalHub.runCommand("history")
-            resultsFrom = Section.HISTORY
-        } else if (target == Section.SEARCH && resultsFrom == Section.HISTORY && lastQuery.isNotEmpty()) {
-            // Back from the history: yewtube still holds it, so repeat the last search.
-            staleItems = state.items
-            resultsFrom = Section.SEARCH
-            TerminalHub.runCommand("/$lastQuery")
+            replaceResults(Section.HISTORY, "history")
+        } else if (target == Section.SEARCH && resultsFrom != Section.SEARCH && lastQuery.isNotEmpty()) {
+            // yewtube still holds the history or a playlist, so repeat the last search.
+            replaceResults(Section.SEARCH, "/$lastQuery")
         }
         section = target
     }
@@ -187,12 +194,12 @@ fun ClientScreen(modifier: Modifier = Modifier) {
             }
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF2A2A2A)))
-        if (section == Section.PLAYLISTS) {
+        if (section == Section.PLAYLISTS && openedPlaylist == null) {
             PlaylistsScreen(
-                onOpened = {
-                    if (resultsFrom == Section.HISTORY) staleItems = state.items
-                    resultsFrom = Section.SEARCH
-                    section = Section.SEARCH
+                onOpened = { playlist ->
+                    if (resultsFrom != Section.PLAYLISTS) staleItems = state.items
+                    resultsFrom = Section.PLAYLISTS
+                    openedPlaylist = playlist.name
                 },
                 modifier = Modifier.weight(1f).fillMaxWidth()
             )
@@ -227,6 +234,24 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                     IconButton(onClick = { search() }) {
                         Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.client_search), tint = FG)
                     }
+                }
+            }
+            if (section == Section.PLAYLISTS) {
+                Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { openedPlaylist = null }) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.pledit_back),
+                            tint = FG
+                        )
+                    }
+                    Text(
+                        openedPlaylist.orEmpty(),
+                        style = small.copy(color = ACCENT),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
             if (autoQueue != null) {
@@ -294,11 +319,18 @@ fun ClientScreen(modifier: Modifier = Modifier) {
             } else if (state.ready && shownItems.isEmpty()) {
                 Box(Modifier.weight(1f).fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
                     Text(
-                        stringResource(if (section == Section.HISTORY) R.string.history_empty else R.string.client_empty),
+                        stringResource(
+                            when (section) {
+                                Section.HISTORY -> R.string.history_empty
+                                Section.PLAYLISTS -> R.string.pledit_empty
+                                else -> R.string.client_empty
+                            }
+                        ),
                         style = small.copy(textAlign = TextAlign.Center)
                     )
                 }
             } else {
+                val listName = if (section == Section.PLAYLISTS) openedPlaylist else null
                 LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
                     items(shownItems, key = { "${it.n}-${it.id}" }) { item ->
                         ResultRow(
@@ -306,7 +338,12 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                             playlist = state.mode == "ytpl",
                             queueRest = autoQueue ?: true,
                             onAdd = { adding = it },
-                            onDownload = { kind -> DownloadHub.loadFormats(item.id, item.title, kind) }
+                            onDownload = { kind -> DownloadHub.loadFormats(item.id, item.title, kind) },
+                            onRemove = if (listName != null) {
+                                { TerminalHub.runCommand("plrm $listName ${item.n}") }
+                            } else {
+                                null
+                            }
                         )
                     }
                 }
@@ -352,7 +389,7 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     adding?.let { number ->
         AddToPlaylistDialog(
             onPick = { name ->
-                TerminalHub.runCommand("add $number $name")
+                TerminalHub.runCommand("pladd $name $number")
                 adding = null
             },
             onDismiss = { adding = null }
@@ -429,7 +466,8 @@ private fun ResultRow(
     playlist: Boolean,
     queueRest: Boolean,
     onAdd: (Int) -> Unit,
-    onDownload: (String) -> Unit
+    onDownload: (String) -> Unit,
+    onRemove: (() -> Unit)? = null
 ) {
     var menu by remember { mutableStateOf(false) }
     val titleStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = FG)
@@ -505,6 +543,15 @@ private fun ResultRow(
                             onAdd(item.n)
                         }
                     )
+                    if (onRemove != null) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.pledit_remove)) },
+                            onClick = {
+                                menu = false
+                                onRemove()
+                            }
+                        )
+                    }
                     OTHER_ACTIONS.forEach { (label, command) ->
                         DropdownMenuItem(
                             text = { Text(stringResource(label)) },

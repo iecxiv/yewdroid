@@ -211,7 +211,7 @@ internal fun AddToPlaylistDialog(onPick: (String) -> Unit, onDismiss: () -> Unit
 
 /** The "Playlists" tab: saved local playlists with open, play, rename and delete. */
 @Composable
-fun PlaylistsScreen(onOpened: () -> Unit, modifier: Modifier = Modifier) {
+fun PlaylistsScreen(onOpened: (PlaylistItem) -> Unit, modifier: Modifier = Modifier) {
     val state by TerminalHub.playlists.collectAsState()
     var renaming by remember { mutableStateOf<PlaylistItem?>(null) }
     var deleting by remember { mutableStateOf<PlaylistItem?>(null) }
@@ -231,7 +231,7 @@ fun PlaylistsScreen(onOpened: () -> Unit, modifier: Modifier = Modifier) {
                     playlist,
                     onOpen = {
                         TerminalHub.runCommand("open ${playlist.n}")
-                        onOpened()
+                        onOpened(playlist)
                     },
                     onPlay = { TerminalHub.runCommand("play ${playlist.n}") },
                     onRename = { renaming = playlist },
