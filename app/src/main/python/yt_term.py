@@ -291,14 +291,19 @@ def _patch_traceback():
 
 
 def _patch_preload():
-    """yewtube looks up the stream of other tracks in threads of its own (the first result of each list, the
-    track after the one chosen). On a phone those lookups compete for the CPU with the one the user is
-    waiting for, so a preload now waits until the track being started has its stream (or a few seconds
-    pass). When nothing is being started it runs at once, as before."""
+    """yewtube looks up the stream of other tracks in threads of its own. On a phone those lookups compete
+    for the CPU with the one the user is waiting for, so:
+    - the look-up of the first result of every list (the only one asked with delay 0) is dropped: it ran
+      before any tap and delayed the track tapped next;
+    - the look-up of the track after the one being played waits until the track being started has its
+      stream (or a few seconds pass). When nothing is being started it runs at once, as before."""
     from mps_youtube import streams
     original = streams.preload
 
     def preload(song, delay=2, override=False):
+        if delay == 0:
+            return
+
         def later():
             waited = 0.0
             while _T["play"] is not None and waited < _PRELOAD_WAIT:
