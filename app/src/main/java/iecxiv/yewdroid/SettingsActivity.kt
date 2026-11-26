@@ -59,6 +59,13 @@ private val LANGUAGES = listOf(
     "es" to R.string.language_spanish
 )
 
+/** Tabs that can be the one shown when the app opens: stored value to label. */
+private val STARTUP_TABS = listOf(
+    UiPrefs.TAB_SEARCH to R.string.client_tab_search,
+    UiPrefs.TAB_PLAYLISTS to R.string.client_tab_playlists,
+    UiPrefs.TAB_HISTORY to R.string.client_tab_history
+)
+
 /** Guidance points shown before the user picks a cookies file. */
 private val COOKIES_GUIDE = listOf(
     R.string.cookies_info_1,
@@ -204,8 +211,8 @@ private fun SettingsScreen(resumes: Int, onBack: () -> Unit) {
     var selectedLanguage by remember { mutableStateOf<String?>(null) }
     val language = selectedLanguage ?: savedLanguage
     var appLanguage by remember { mutableStateOf(AppLanguage.saved(ctx)) }
-    var startTab by remember { mutableStateOf(ClientPrefs.startTab(ctx)) }
-    var clearDownloads by remember { mutableStateOf(ClientPrefs.clearDownloadsOnClose(ctx)) }
+    var startupTab by remember { mutableStateOf(UiPrefs.defaultTab(ctx)) }
+    var clearDownloads by remember { mutableStateOf(UiPrefs.clearDownloadsOnClose(ctx)) }
     val sessionStarted by TerminalHub.sessionStarted.collectAsState()
     val translationAvailable by TerminalHub.translationAvailable.collectAsState()
     var cookiesSaved by remember { mutableStateOf(cookiesFile(ctx).isFile) }
@@ -287,45 +294,42 @@ private fun SettingsScreen(resumes: Int, onBack: () -> Unit) {
                 }
             }
 
-            SettingsSection(stringResource(R.string.starttab_section)) {
-                Text(stringResource(R.string.starttab_desc), style = note)
-                ClientPrefs.START_TABS.forEach { (value, label) ->
+            SettingsSection(stringResource(R.string.startup_section)) {
+                Text(stringResource(R.string.startup_tab_desc), style = note)
+                STARTUP_TABS.forEach { (value, label) ->
                     Row(
                         Modifier.fillMaxWidth()
                             .selectable(
-                                selected = startTab == value,
+                                selected = startupTab == value,
                                 role = Role.RadioButton,
                                 onClick = {
-                                    startTab = value
-                                    ClientPrefs.saveStartTab(ctx, value)
+                                    startupTab = value
+                                    UiPrefs.saveDefaultTab(ctx, value)
                                 }
                             )
                             .padding(vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         RadioButton(
-                            selected = startTab == value,
+                            selected = startupTab == value,
                             onClick = null,
                             colors = RadioButtonDefaults.colors(selectedColor = ACCENT, unselectedColor = FG)
                         )
                         Text(stringResource(label), style = body, modifier = Modifier.padding(start = 12.dp))
                     }
                 }
-            }
-
-            SettingsSection(stringResource(R.string.dlclear_section)) {
                 Row(
                     Modifier.fillMaxWidth()
                         .clickable {
                             clearDownloads = !clearDownloads
-                            ClientPrefs.saveClearDownloadsOnClose(ctx, clearDownloads)
+                            UiPrefs.saveClearDownloadsOnClose(ctx, clearDownloads)
                         }
-                        .padding(vertical = 8.dp),
+                        .padding(top = 12.dp, bottom = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text(stringResource(R.string.dlclear_title), style = body)
-                        Text(stringResource(R.string.dlclear_desc), style = note)
+                        Text(stringResource(R.string.startup_clear_downloads), style = body)
+                        Text(stringResource(R.string.startup_clear_downloads_desc), style = note)
                     }
                     Switch(
                         checked = clearDownloads,
