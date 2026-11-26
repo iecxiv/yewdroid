@@ -57,6 +57,7 @@ def install():
     from android_encoder_defaults import help_topic as editor_help
     from android_search_order import install as install_search_order
     from android_playlist_edit import install as install_playlist_edit
+    from android_views import install as install_views
     if getattr(g, "_android_features_installed", False):
         return
 
@@ -143,4 +144,5 @@ def install():
     install_editor()
     install_search_order()
     install_playlist_edit()
+    install_views()
     g._android_features_installed = True
