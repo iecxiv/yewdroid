@@ -17,22 +17,44 @@ def install(pafy):
     def warn(message):
         finish(c.y + message + c.w)
 
+    def track(song, dltype):
+        """Lists a terminal download in the Downloads tab (it has no progress or cancel there)."""
+        try:
+            import android_downloads
+            kind = "audio" if dltype.lower().startswith("da") else "video"
+            return android_downloads.external_start(song.ytid, song.title, kind, "Terminal")
+        except Exception:
+            return None
+
+    def settle(job, destination="", error="", cancelled=False):
+        if job is None:
+            return
+        try:
+            import android_downloads
+            android_downloads.external_finish(job, destination, error, cancelled)
+        except Exception:
+            pass
+
     def run_items(dltype, songs):
         saved, failed = [], []
         interrupted = False
         total = len(songs)
         for position, song in enumerate(songs, 1):
             print("\n%s[queue %d/%d]%s %s%s%s" % (c.y, position, total, c.w, c.r, song.title, c.w))
+            job = track(song, dltype)
             try:
                 result = download_selected(song.ytid, config.DDIR.get, dltype.lower())
                 if not result:
                     raise RuntimeError("The download did not confirm that the file was saved")
                 destination = result if isinstance(result, str) else "local folder: %s" % config.DDIR.get
                 saved.append("%s -> %s%s%s" % (song.title, c.g, destination, c.w))
+                settle(job, result if isinstance(result, str) else "")
             except (KeyboardInterrupt, DownloadCancelled):
+                settle(job, cancelled=True)
                 interrupted = True
                 break
             except Exception as error:
+                settle(job, error=str(error))
                 failed.append("%s: %s" % (song.title, error))
         remaining = total - len(saved) - len(failed)
         color = c.g if not failed and not interrupted else c.y

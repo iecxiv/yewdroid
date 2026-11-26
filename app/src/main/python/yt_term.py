@@ -21,9 +21,9 @@ _sink = None
 _in = None
 _size = [80, 30]
 _orig_err = sys.stderr
-# True while the native client is shown: playback then runs in its own thread so yewtube
-# keeps answering commands (search, open, paging) while something plays.
-_background = [False]
+# Playback always runs in its own thread, in the terminal and in the native client alike, so yewtube keeps
+# answering commands (search, open, paging) while something plays and both views behave the same.
+_background = [True]
 # Playback modes chosen in the player: shuffle on/off and repeat 0 = off, 1 = the list, 2 = one track.
 _mode = {"shuffle": False, "repeat": 0}
 
@@ -96,7 +96,8 @@ def resize(cols, rows):
 
 
 def set_background(on):
-    _background[0] = bool(on)
+    """Kept for the app's calls; playback is always in the background now (see _background)."""
+    return None
 
 
 def player_event(action):

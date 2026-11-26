@@ -337,9 +337,41 @@ def enqueue(ytid, title, kind, format_id, label):
     return job["id"]
 
 
+def external_start(ytid, title, kind, label):
+    """Lists a download that runs outside the queue (the terminal commands) as in progress."""
+    with _lock:
+        _state["next"] += 1
+        job = {"id": _state["next"], "ytid": str(ytid), "title": str(title),
+               "kind": "audio" if kind == "audio" else "video", "format_id": "", "label": str(label),
+               "state": "running", "percent": 0.0, "stage": "download", "path": "", "error": "",
+               "external": True}
+        _jobs.append(job)
+    _push(True)
+    return job["id"]
+
+
+def external_finish(job_id, path="", error="", cancelled=False):
+    """Marks a download listed by external_start as done, failed or cancelled."""
+    job = _find(int(job_id))
+    if job is None:
+        return False
+    with _lock:
+        if cancelled:
+            job.update(state="cancelled", stage="")
+        elif error:
+            job.update(state="error", stage="", error=str(error)[:200])
+        else:
+            job.update(state="done", percent=100.0, stage="", path=str(path or ""))
+    _push(True)
+    return True
+
+
 def cancel(job_id):
     job = _find(int(job_id))
     if job is None:
+        return False
+    if job.get("external"):
+        # Terminal downloads are stopped from the terminal (^C), not from the list.
         return False
     with _lock:
         if job["state"] == "queued":

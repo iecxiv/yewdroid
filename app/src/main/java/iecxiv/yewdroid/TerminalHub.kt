@@ -85,10 +85,12 @@ object TerminalHub {
     @Volatile private var exo: ExoPlayer? = null
     @Volatile private var nextVideo = false
     @Volatile private var appContext: Context? = null
-    /** Whether playback runs in its own thread (native client) instead of blocking yewtube. */
+    /** Kept for the callers; playback now always runs in its own thread (see yt_term.py). */
     @Volatile private var background = false
     /** True once the current track was reported to Python as started (it then goes to the history). */
     @Volatile private var startReported = false
+    /** True once a command was typed in the terminal: the list yewtube holds may no longer be the client's. */
+    @Volatile private var terminalTouched = false
     private var surface: SurfaceView? = null
     private var started = false
     private val sink = HubSink()
@@ -180,14 +182,16 @@ object TerminalHub {
         }
     }
 
-    /**
-     * In the native client playback runs in a background thread so yewtube keeps answering commands
-     * (search, open, paging) while something plays. The terminal keeps the blocking behaviour.
-     */
+    /** Kept for the callers; playback no longer depends on the view (see yt_term.py). */
     fun setBackgroundPlayback(on: Boolean) {
         background = on
-        val module = py ?: return
-        scope.launch { runCatching { module.callAttr("set_background", on) } }
+    }
+
+    /** Whether a terminal command was typed since the client screen was last built; reading it clears it. */
+    fun takeTerminalTouched(): Boolean {
+        val value = terminalTouched
+        terminalTouched = false
+        return value
     }
 
     fun setTranslated(ctx: Context, on: Boolean) {
@@ -225,7 +229,6 @@ object TerminalHub {
                 }
                 positionMs.value = posMs
                 durationMs.value = if (durMs == C.TIME_UNSET || durMs < 0) 0L else durMs
-                runCatching { py?.callAttr("progress", (posMs / 1000).toInt()) }
             }
         }
     }
@@ -317,7 +320,7 @@ object TerminalHub {
         durationMs.value = 0L
         // A new track: it is reported to the history once it really starts sounding.
         startReported = false
-        // yewtube stays inside playback until the track ends, so it is playing, not busy.
+        // yewtube is free to answer commands while a track plays, so it is playing, not busy.
         _client.value = _client.value.copy(busy = false)
         refreshQueue()
         main.post {
@@ -351,6 +354,7 @@ object TerminalHub {
     }
 
     fun sendLine(line: String) {
+        terminalTouched = true
         onWrite(line + "\n")
         scope.launch { runCatching { py?.callAttr("send", line) } }
     }
