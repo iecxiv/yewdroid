@@ -31,6 +31,8 @@ _last_video = [None]
 # Timing log: when the Python side was loaded and when the current play request was made.
 _T0 = time.monotonic()
 _T = {"play": None}
+# Longest a preload waits for the track being started to get its stream (seconds).
+_PRELOAD_WAIT = 20.0
 
 
 def _tlog(message):
@@ -286,6 +288,33 @@ def _patch_traceback():
                 pass
 
     traceback.print_exception = pe
+
+
+def _patch_preload():
+    """yewtube looks up the stream of other tracks in threads of its own (the first result of each list, the
+    track after the one chosen). On a phone those lookups compete for the CPU with the one the user is
+    waiting for, so a preload now waits until the track being started has its stream (or a few seconds
+    pass). When nothing is being started it runs at once, as before."""
+    from mps_youtube import streams
+    original = streams.preload
+
+    def preload(song, delay=2, override=False):
+        def later():
+            waited = 0.0
+            while _T["play"] is not None and waited < _PRELOAD_WAIT:
+                time.sleep(0.2)
+                waited += 0.2
+            if waited > 0:
+                _tlog("preload of %s waited %.1fs for the track being started" % (
+                    getattr(song, "ytid", "?"), waited))
+            try:
+                original(song, delay, override)
+            except Exception:
+                traceback.print_exc(file=_orig_err)
+
+        threading.Thread(target=later, daemon=True, name="yewtube-preload-wait").start()
+
+    streams.preload = preload
 
 
 def _find_qjs():
@@ -549,6 +578,7 @@ def _make_player_class(CmdPlayer):
                     return super().play(*args, **kwargs)
                 finally:
                     self._active = False
+                    _T["play"] = None
                     try:
                         _sink.stopPlayback()
                     except Exception:
@@ -561,6 +591,8 @@ def _make_player_class(CmdPlayer):
                     traceback.print_exc(file=_orig_err)
                 finally:
                     self._active = False
+                    # A request that never got a stream must not keep the preloads waiting.
+                    _T["play"] = None
                     try:
                         _sink.stopPlayback()
                     except Exception:
@@ -675,6 +707,10 @@ def _run(files_dir):
         _patch_js_runtime()
         _patch_downloads()
         _patch_traceback()
+        try:
+            _patch_preload()
+        except Exception:
+            traceback.print_exc(file=_orig_err)
         yplayer.history = _NoHistoryAdd(yhistory)
 
         cls = _make_player_class(CmdPlayer)
