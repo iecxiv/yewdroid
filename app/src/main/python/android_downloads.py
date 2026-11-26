@@ -1,7 +1,5 @@
-"""Download queue for the native client: lists formats, runs one download at a time, reports progress."""
-import itertools
+"""Download queue for the native client: lists formats, runs one worker thread, reports progress."""
 import json
-import os
 import queue
 import re
 import sys
@@ -9,186 +7,219 @@ import threading
 import time
 import traceback
 
+from android_dl_common import QUIET, Cancelled, Progress
+
+_lock = threading.RLock()
 _jobs = []
-_lock = threading.Lock()
+_trackers = {}
 _pending = queue.Queue()
-_worker = [None]
-_ids = itertools.count(1)
-_last = [0.0]
+_state = {"worker": None, "next": 0, "pushed": 0.0}
 _FINISHED = ("done", "error", "cancelled")
-_FIELDS = ("id", "title", "kind", "label", "status", "stage", "percent", "message")
+_WEIGHTS = {
+    "audio": {"download": (0.0, 0.95), "export": (0.95, 1.0)},
+    "video": {"video": (0.0, 0.75), "audio": (0.75, 0.95), "merge": (0.95, 0.98),
+              "export": (0.98, 1.0)},
+}
 
 
-class Cancelled(Exception):
-    pass
+class _Silent:
+    def debug(self, message):
+        pass
+
+    def warning(self, message):
+        pass
+
+    def error(self, message):
+        pass
 
 
-def _folder():
+def _clean(message):
+    return re.sub(r"https?://\S+", "<URL>", str(message))
+
+
+def _log():
+    err = getattr(sys.modules.get("yt_term"), "_orig_err", None) or sys.__stderr__
     try:
-        from mps_youtube import config
-        return str(config.DDIR.get)
-    except Exception:
-        return os.path.join(os.environ.get("HOME", "."), "Downloads")
-
-
-def _clean(error):
-    text = re.sub(r"https?://\S+", "<URL>", str(error))
-    lines = [line for line in text.splitlines() if line.strip()]
-    return "\n".join(lines[:2])[:300]
-
-
-def _size(fmt):
-    return int(fmt.get("filesize") or fmt.get("filesize_approx") or 0)
-
-
-def snapshot():
-    with _lock:
-        items = [{key: job[key] for key in _FIELDS} for job in _jobs]
-    return json.dumps({"items": items})
-
-
-def _notify(force=False):
-    now = time.time()
-    if not force and now - _last[0] < 0.25:
-        return
-    _last[0] = now
-    try:
-        from java import jclass
-        jclass("iecxiv.yewdroid.DownloadHub").update(snapshot())
+        traceback.print_exc(file=err)
     except Exception:
         pass
 
 
-def refresh():
-    _notify(True)
+def _size(fmt):
+    value = fmt.get("filesize") or fmt.get("filesize_approx")
+    try:
+        return int(value) if value else 0
+    except (TypeError, ValueError):
+        return 0
 
 
 def formats(ytid):
-    """Audio and video options for one video, as JSON. Never raises."""
+    """JSON with the audio and video options yt-dlp offers for a video."""
+    import yt_dlp
     result = {"audio": [], "video": [], "error": ""}
     try:
-        import yt_dlp
-        opts = {"quiet": True, "no_warnings": True, "noplaylist": True}
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info("https://www.youtube.com/watch?v=%s" % ytid,
-                                    download=False, process=False)
-        found = list((info or {}).get("formats") or [])
-        pool = [f for f in found if f.get("url")] or found
-        pool = [f for f in pool if not f.get("has_drm")]
-        audio = [f for f in pool if f.get("vcodec") == "none"
-                 and f.get("acodec") not in (None, "none")]
-        preferred = [f for f in audio if f.get("ext") == "m4a"] or audio
-        preferred.sort(key=lambda f: f.get("abr") or f.get("tbr") or 0, reverse=True)
+        options = {"quiet": True, "no_warnings": True, "noplaylist": True, "logger": _Silent()}
+        with yt_dlp.YoutubeDL(options) as ydl:
+            info = ydl.extract_info("https://www.youtube.com/watch?v=%s" % ytid, download=False)
+        usable = [f for f in ((info or {}).get("formats") or []) if f.get("url") and not f.get("has_drm")]
+        audio = [f for f in usable if f.get("vcodec") == "none" and f.get("acodec") not in (None, "none")]
+        m4a = [f for f in audio if f.get("ext") == "m4a"]
+        pool = sorted(m4a or audio, key=lambda f: f.get("abr") or f.get("tbr") or 0, reverse=True)
         seen = set()
-        for fmt in preferred:
-            rate = int(fmt.get("abr") or fmt.get("tbr") or 0)
-            label = "%s \u00b7 %d kbps" % (str(fmt.get("ext") or "audio").upper(), rate) if rate \
-                else str(fmt.get("ext") or "audio").upper()
-            if label in seen:
-                continue
-            seen.add(label)
-            result["audio"].append({"key": str(fmt.get("format_id")), "label": label, "size": _size(fmt)})
-        audio_size = _size(preferred[0]) if preferred else 0
-        best = {}
         for fmt in pool:
-            height = fmt.get("height")
-            if (fmt.get("ext") == "mp4" and str(fmt.get("vcodec") or "").startswith("avc1") and height):
-                score = fmt.get("tbr") or _size(fmt)
-                if height not in best or score > (best[height].get("tbr") or _size(best[height])):
-                    best[height] = fmt
+            rate = int(round(fmt.get("abr") or fmt.get("tbr") or 0))
+            if rate in seen:
+                continue
+            seen.add(rate)
+            name = str(fmt.get("ext") or "audio").upper()
+            result["audio"].append({
+                "id": str(fmt["format_id"]),
+                "label": ("%s \u00b7 %d kbps" % (name, rate)) if rate else name,
+                "size": _size(fmt), "recommended": False})
+        if result["audio"]:
+            result["audio"][0]["recommended"] = True
+        audio_size = result["audio"][0]["size"] if result["audio"] else 0
+        best = {}
+        for fmt in usable:
+            if (fmt.get("ext") == "mp4" and str(fmt.get("vcodec") or "").startswith("avc1")
+                    and fmt.get("acodec") in (None, "none") and fmt.get("height")):
+                height = int(fmt["height"])
+                rank = (0 if "m3u8" in str(fmt.get("protocol")) else 1, fmt.get("tbr") or 0)
+                if height not in best or rank > best[height][0]:
+                    best[height] = (rank, fmt)
+        entries = []
         for height in sorted(best, reverse=True):
-            video_size = _size(best[height])
-            result["video"].append({
-                "key": str(int(height)), "label": "%dp" % height,
-                "size": video_size + audio_size if video_size else 0})
+            fmt = best[height][1]
+            fps = int(fmt.get("fps") or 0)
+            size = _size(fmt)
+            entries.append((height, {
+                "id": str(fmt["format_id"]),
+                "label": "%dp" % height + (" \u00b7 %d fps" % fps if fps > 30 else ""),
+                "size": size + audio_size if size else 0, "recommended": False}))
+        if entries:
+            pick = next((o for h, o in entries if h <= 720), entries[-1][1])
+            pick["recommended"] = True
+        result["video"] = [option for _, option in entries]
     except Exception as error:
-        result["error"] = _clean(error)
-    return json.dumps(result)
+        _log()
+        result["error"] = _clean(error)[:300]
+    return json.dumps(result, ensure_ascii=False)
 
 
-def enqueue(ytid, title, kind, choice, label):
-    job = {"id": next(_ids), "ytid": str(ytid), "title": str(title), "kind": str(kind),
-           "choice": str(choice or ""), "label": str(label or ""), "status": "queued",
-           "stage": "", "percent": 0, "message": "", "cancel": False}
+def snapshot():
     with _lock:
-        _jobs.append(job)
-    _pending.put(job)
-    if _worker[0] is None or not _worker[0].is_alive():
-        _worker[0] = threading.Thread(target=_loop, daemon=True, name="yewtube-downloads")
-        _worker[0].start()
-    _notify(True)
-    return job["id"]
+        items = [{key: job[key] for key in ("id", "title", "kind", "label", "state", "percent",
+                                            "stage", "path", "error")} for job in _jobs]
+    return json.dumps({"items": items}, ensure_ascii=False)
 
 
-def cancel(job_id):
-    with _lock:
-        job = next((j for j in _jobs if j["id"] == int(job_id)), None)
-    if job is None or job["status"] in _FINISHED:
+def _push(force=False):
+    now = time.monotonic()
+    if not force and now - _state["pushed"] < 0.25:
         return
-    job["cancel"] = True
-    if job["status"] == "queued":
-        job["status"] = "cancelled"
-    _notify(True)
+    _state["pushed"] = now
+    try:
+        from java import jclass
+        jclass("iecxiv.yewdroid.DownloadHub").update(snapshot())
+    except Exception:
+        _log()
 
 
-def clear_finished():
+def _find(job_id):
     with _lock:
-        _jobs[:] = [j for j in _jobs if j["status"] not in _FINISHED]
-    _notify(True)
+        return next((job for job in _jobs if job["id"] == job_id), None)
+
+
+def _run(job):
+    weights = _WEIGHTS[job["kind"]]
+
+    def on_stage(name, fraction):
+        start, end = weights.get(name, (0.0, 1.0))
+        with _lock:
+            job["stage"] = name
+            job["percent"] = round(100.0 * (start + (end - start) * fraction), 1)
+        _push()
+
+    tracker = Progress(on_stage)
+    _trackers[job["id"]] = tracker
+    QUIET.on = True
+    try:
+        from mps_youtube import config
+        folder = config.DDIR.get
+        if job["kind"] == "audio":
+            from android_audio_download import download_audio
+            from android_video_download import _publish
+            destination = download_audio(job["ytid"], folder, _publish, job["format_id"], tracker)
+        else:
+            from android_video_download import download_video
+            destination = download_video(job["ytid"], folder, lambda data: None,
+                                         job["format_id"], tracker)
+        with _lock:
+            job.update(state="done", percent=100.0, stage="", path=str(destination or ""))
+    except BaseException as error:
+        if tracker.cancelled or isinstance(error, Cancelled):
+            with _lock:
+                job.update(state="cancelled", stage="")
+        else:
+            _log()
+            lines = [line.strip() for line in _clean(error).splitlines() if line.strip()]
+            with _lock:
+                job.update(state="error", stage="", error=(lines[0] if lines else "Error")[:200])
+    finally:
+        QUIET.on = False
+        _trackers.pop(job["id"], None)
 
 
 def _loop():
     while True:
-        job = _pending.get()
-        if job["status"] != "queued":
-            continue
+        job = _find(_pending.get())
         try:
+            if job is None or job["state"] != "queued":
+                continue
+            with _lock:
+                job["state"] = "running"
+            _push(True)
             _run(job)
         except Exception:
-            traceback.print_exc(file=sys.__stderr__ or sys.stderr)
-            job["status"], job["message"] = "error", "Unexpected error"
-            _notify(True)
+            _log()
+        _push(True)
 
 
-def _run(job):
-    import android_audio_download as audio
-    import android_video_download as video
+def enqueue(ytid, title, kind, format_id, label):
+    kind = "audio" if kind == "audio" else "video"
+    with _lock:
+        _state["next"] += 1
+        job = {"id": _state["next"], "ytid": str(ytid), "title": str(title), "kind": kind,
+               "format_id": str(format_id), "label": str(label), "state": "queued",
+               "percent": 0.0, "stage": "", "path": "", "error": ""}
+        _jobs.append(job)
+        worker = _state["worker"]
+        if worker is None or not worker.is_alive():
+            worker = threading.Thread(target=_loop, daemon=True, name="yewdroid-downloads")
+            _state["worker"] = worker
+            worker.start()
+    _pending.put(job["id"])
+    _push(True)
+    return job["id"]
 
-    def check():
-        if job["cancel"]:
-            raise Cancelled()
 
-    def on_progress(data):
-        check()
-        if data.get("status") == "downloading":
-            total = data.get("total_bytes") or data.get("total_bytes_estimate") or 0
-            job["percent"] = int(100.0 * data.get("downloaded_bytes", 0) / total) if total else -1
-            _notify()
+def cancel(job_id):
+    job = _find(int(job_id))
+    if job is None:
+        return False
+    with _lock:
+        if job["state"] == "queued":
+            job["state"] = "cancelled"
+        elif job["state"] == "running":
+            tracker = _trackers.get(job["id"])
+            if tracker is not None:
+                tracker.cancelled = True
+            job["stage"] = "cancelling"
+    _push(True)
+    return True
 
-    def on_stage(name):
-        if name in ("audio", "video"):
-            check()
-        job["stage"] = name
-        job["percent"] = -1 if name in ("merging", "exporting") else 0
-        _notify(True)
 
-    job["status"] = "running"
-    _notify(True)
-    try:
-        if job["kind"] == "audio":
-            destination = audio.download_audio(
-                job["ytid"], _folder(), video._publish, format_id=job["choice"] or None,
-                on_progress=on_progress, on_stage=on_stage, cancelled=lambda: job["cancel"])
-        else:
-            destination = video.download_video(
-                job["ytid"], _folder(), on_progress,
-                height=int(job["choice"]) if job["choice"] else None,
-                on_stage=on_stage, cancelled=lambda: job["cancel"])
-        job["status"], job["message"], job["percent"] = "done", str(destination), 100
-    except Exception as error:
-        if job["cancel"]:
-            job["status"], job["message"] = "cancelled", ""
-        else:
-            job["status"], job["message"] = "error", _clean(error)
-            traceback.print_exc(file=sys.__stderr__ or sys.stderr)
-    _notify(True)
+def clear_finished():
+    with _lock:
+        _jobs[:] = [job for job in _jobs if job["state"] not in _FINISHED]
+    _push(True)

@@ -4,17 +4,21 @@ import shutil
 import sys
 import tempfile
 
+from android_dl_common import Cancelled, say
+
 
 def _publish(path):
     from java import jclass
     if jclass("android.os.Build$VERSION").SDK_INT < 29:
-        print("Note: Android 8/9 keeps the previous destination; the file was not exported to public Downloads.")
+        say("Note: Android 8/9 keeps the previous destination; the file was not exported to public Downloads.")
         return os.path.abspath(path)
     app = jclass("com.chaquo.python.Python").getPlatform().getApplication()
     return str(jclass("iecxiv.yewdroid.DownloadPublisher").publish(app, path))
 
 
-def download_video(ytid, folder, hook, height=None, on_stage=None, cancelled=None):
+def download_video(ytid, folder, hook, format_id=None, tracker=None):
+    """Downloads video + audio and muxes them. `format_id` picks a specific video format;
+    `tracker` (android_dl_common.Progress) receives progress and can cancel."""
     import yt_dlp
     from java import jclass
     from yt_dlp.utils import sanitize_filename
@@ -24,21 +28,24 @@ def download_video(ytid, folder, hook, height=None, on_stage=None, cancelled=Non
     muxer = jclass("iecxiv.yewdroid.Mp4Muxer")
     work = tempfile.mkdtemp(prefix=".yewdroid-video-", dir=folder)
     url = "https://www.youtube.com/watch?v=%s" % ytid
-    video_selector = "bv[ext=mp4][vcodec^=avc1]"
-    if height:
-        video_selector += "[height<=%d]" % int(height)
     try:
         def fetch(label, selector):
-            print("\n[download] %s" % label)
-            if on_stage is not None:
-                on_stage(label)
+            say("\n[download] %s" % label)
+
+            def on_progress(data):
+                hook(data)
+                if tracker is not None and data.get("status") == "downloading":
+                    total = data.get("total_bytes") or data.get("total_bytes_estimate") or 0
+                    if total:
+                        tracker.stage(label, data.get("downloaded_bytes", 0) / total)
+
             opts = {
                 "outtmpl": os.path.join(work, label + ".%(ext)s"),
                 "format": selector,
                 "noplaylist": True,
                 "quiet": True,
                 "no_warnings": False,
-                "progress_hooks": [hook],
+                "progress_hooks": [on_progress],
                 "fixup": "never",
                 "hls_prefer_native": True,
                 "postprocessors": [],
@@ -54,7 +61,7 @@ def download_video(ytid, folder, hook, height=None, on_stage=None, cancelled=Non
                 raise RuntimeError("Incomplete track: %s" % label)
             return info, path
 
-        vi, video = fetch("video", video_selector)
+        vi, video = fetch("video", str(format_id) if format_id else "bv[ext=mp4][vcodec^=avc1]")
         _, audio = fetch("audio", "ba[ext=m4a][acodec^=mp4a]")
         title = sanitize_filename(str(vi.get("title") or "video"), restricted=False)[:120]
         safe_id = sanitize_filename(str(ytid), restricted=True)[:32]
@@ -62,32 +69,32 @@ def download_video(ytid, folder, hook, height=None, on_stage=None, cancelled=Non
         # Track filenames must remain distinct even for a pathological title/id.
         if output in (video, audio):
             output = os.path.join(work, "result.mp4")
-        print("\n[download] Merging video and audio without re-encoding...")
-        if on_stage is not None:
-            on_stage("merging")
+        if tracker is not None:
+            tracker.stage("merge")
+        say("\n[download] Merging video and audio without re-encoding...")
         muxer.merge(video, audio, output)
         if not os.path.isfile(output) or os.path.getsize(output) == 0:
             raise RuntimeError("The muxer did not produce a valid MP4")
-        print("[download] Exporting to public Downloads...")
-        if on_stage is not None:
-            on_stage("exporting")
+        if tracker is not None:
+            tracker.stage("export")
+        say("[download] Exporting to public Downloads...")
         destination = _publish(output)
         # On Android 8/9 the local output is the final file: do not delete it.
         if destination == os.path.abspath(output):
-            print("\nSaved locally: %s" % destination)
+            say("\nSaved locally: %s" % destination)
             return destination
     except BaseException as exc:
-        if cancelled is not None and cancelled():
+        if tracker is not None and tracker.cancelled:
             shutil.rmtree(work, ignore_errors=True)
-            raise
+            raise Cancelled() from None
         message = "Video download/export interrupted. Files kept in: %s" % work
-        print(message)
+        say(message)
         if isinstance(exc, Exception):
             raise RuntimeError("%s\n%s" % (exc, message)) from exc
         raise
     else:
         shutil.rmtree(work, ignore_errors=True)
-        print("\nSaved: %s" % destination)
+        say("\nSaved: %s" % destination)
         return destination
 
 

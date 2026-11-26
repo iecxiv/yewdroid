@@ -69,7 +69,7 @@ private enum class Section(val label: Int) {
     SEARCH(R.string.client_tab_search),
     PLAYLISTS(R.string.client_tab_playlists),
     HISTORY(R.string.client_tab_history),
-    DOWNLOADS(R.string.client_tab_downloads)
+    DOWNLOADS(R.string.dl_tab)
 }
 
 /**
@@ -77,7 +77,7 @@ private enum class Section(val label: Int) {
  */
 private fun selection(n: Int, queueRest: Boolean) = if (queueRest) "$n-" else "$n"
 
-/** Menu actions before "Download": label to the yewtube command for result number n. */
+/** Menu actions before the downloads: label to the yewtube command for result number n. */
 private val PLAY_ACTIONS: List<Pair<Int, (Int, Boolean) -> String>> = listOf(
     R.string.client_play_audio to { n, queueRest -> "${selection(n, queueRest)} -a" },
     R.string.client_play_video to { n, queueRest -> "${selection(n, queueRest)} -w" }
@@ -97,12 +97,14 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
     val focus = LocalFocusManager.current
     val state by TerminalHub.client.collectAsState()
+    val downloads by DownloadHub.downloads.collectAsState()
+    val formats by DownloadHub.formats.collectAsState()
+    val activeDownloads = downloads.items.count { it.active }
     var query by rememberSaveable { mutableStateOf("") }
     var section by rememberSaveable { mutableStateOf(Section.SEARCH) }
     var focused by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     var adding by remember { mutableStateOf<Int?>(null) }
-    var downloading by remember { mutableStateOf<Pair<ClientItem, String>?>(null) }
     var clearingHistory by remember { mutableStateOf(false) }
     val autoQueueFlow = remember(ctx.applicationContext) { TerminalPreferences.clientAutoQueue(ctx.applicationContext) }
     val savedAutoQueue by autoQueueFlow.collectAsState(initial = null)
@@ -146,13 +148,19 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     Column(modifier) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
             Section.values().forEach { tab ->
+                val label = if (tab == Section.DOWNLOADS && activeDownloads > 0) {
+                    stringResource(R.string.dl_tab_active, activeDownloads)
+                } else {
+                    stringResource(tab.label)
+                }
                 Text(
-                    stringResource(tab.label),
+                    label,
                     style = small.copy(
                         color = if (section == tab) ACCENT else MUTED,
                         textAlign = TextAlign.Center
                     ),
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f).clickable { select(tab) }.padding(vertical = 10.dp)
                 )
             }
@@ -273,7 +281,7 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                             playlist = state.mode == "ytpl",
                             queueRest = autoQueue ?: true,
                             onAdd = { adding = it },
-                            onDownload = { target, kind -> downloading = target to kind }
+                            onDownload = { kind -> DownloadHub.loadFormats(item.id, item.title, kind) }
                         )
                     }
                 }
@@ -325,17 +333,6 @@ fun ClientScreen(modifier: Modifier = Modifier) {
             onDismiss = { adding = null }
         )
     }
-    downloading?.let { (item, kind) ->
-        FormatDialog(
-            item = item,
-            kind = kind,
-            onQueued = {
-                downloading = null
-                section = Section.DOWNLOADS
-            },
-            onDismiss = { downloading = null }
-        )
-    }
     if (clearingHistory) {
         ConfirmDialog(
             title = stringResource(R.string.history_clear_confirm),
@@ -345,6 +342,13 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                 clearingHistory = false
             },
             onDismiss = { clearingHistory = false }
+        )
+    }
+    formats?.let { picker ->
+        FormatsDialog(
+            state = picker,
+            onPick = { option -> DownloadHub.start(picker, option) },
+            onDismiss = { DownloadHub.dismissFormats() }
         )
     }
 }
@@ -400,7 +404,7 @@ private fun ResultRow(
     playlist: Boolean,
     queueRest: Boolean,
     onAdd: (Int) -> Unit,
-    onDownload: (ClientItem, String) -> Unit
+    onDownload: (String) -> Unit
 ) {
     var menu by remember { mutableStateOf(false) }
     val titleStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = FG)
@@ -459,14 +463,14 @@ private fun ResultRow(
                         text = { Text(stringResource(R.string.client_download_audio)) },
                         onClick = {
                             menu = false
-                            onDownload(item, "audio")
+                            onDownload("audio")
                         }
                     )
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.client_download_video)) },
                         onClick = {
                             menu = false
-                            onDownload(item, "video")
+                            onDownload("video")
                         }
                     )
                     DropdownMenuItem(
