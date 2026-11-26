@@ -1,5 +1,8 @@
 package iecxiv.yewdroid
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.graphics.BitmapFactory
 import android.util.LruCache
 import androidx.compose.foundation.Image
@@ -81,6 +84,29 @@ private enum class Section(val label: Int) {
 }
 
 /**
+ * What the client knew when its screen was last closed. The screen is rebuilt when switching to the terminal
+ * and back, but the yewtube session (and the list it holds) lives on, so the screen must pick up from here.
+ */
+private object ClientMemory {
+    var section: Section? = null
+    var query = ""
+    var openedPlaylist: String? = null
+    var resultsFrom: Section = Section.SEARCH
+    var lastQuery = ""
+    var searchKept = false
+    var startupDone = false
+}
+
+private fun Context.activityFinishing(): Boolean {
+    var current = this
+    while (current is ContextWrapper) {
+        if (current is Activity) return current.isFinishing
+        current = current.baseContext
+    }
+    return false
+}
+
+/**
  * yewtube selection for result n: "n-" plays n and queues the rest of the page, "n" plays only n.
  */
 private fun selection(n: Int, queueRest: Boolean) = if (queueRest) "$n-" else "$n"
@@ -133,11 +159,12 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     val downloads by DownloadHub.downloads.collectAsState()
     val formats by DownloadHub.formats.collectAsState()
     val activeDownloads = downloads.items.count { it.active }
-    var query by rememberSaveable { mutableStateOf("") }
-    // The tab chosen in Settings (search, playlists or history) is the one shown when the client opens.
+    var query by rememberSaveable { mutableStateOf(ClientMemory.query) }
+    // The tab chosen in Settings (search, playlists or history) is the one shown when the client opens;
+    // coming back from the terminal it is the tab that was open.
     var section by rememberSaveable {
         mutableStateOf(
-            when (UiPrefs.defaultTab(ctx)) {
+            ClientMemory.section ?: when (UiPrefs.defaultTab(ctx)) {
                 UiPrefs.TAB_PLAYLISTS -> Section.PLAYLISTS
                 UiPrefs.TAB_HISTORY -> Section.HISTORY
                 else -> Section.SEARCH
@@ -145,15 +172,15 @@ fun ClientScreen(modifier: Modifier = Modifier) {
         )
     }
     // Which tab produced the results yewtube currently holds (history and playlists replace the search results).
-    var resultsFrom by rememberSaveable { mutableStateOf(Section.SEARCH) }
+    var resultsFrom by rememberSaveable { mutableStateOf(ClientMemory.resultsFrom) }
     // The history of a startup tab set to History is loaded once the session is ready.
-    var startupDone by rememberSaveable { mutableStateOf(false) }
+    var startupDone by rememberSaveable { mutableStateOf(ClientMemory.startupDone) }
     // Last search sent; repeated when the search results kept aside no longer exist (e.g. the app process restarted).
-    var lastQuery by rememberSaveable { mutableStateOf("") }
-    // True once the search results were put aside (viewstash) during this screen's life.
-    var searchKept by remember { mutableStateOf(false) }
+    var lastQuery by rememberSaveable { mutableStateOf(ClientMemory.lastQuery) }
+    // True once the search results were put aside (viewstash) in this session.
+    var searchKept by remember { mutableStateOf(ClientMemory.searchKept) }
     // Name of the saved playlist shown inside the Playlists tab, if one is open.
-    var openedPlaylist by rememberSaveable { mutableStateOf<String?>(null) }
+    var openedPlaylist by rememberSaveable { mutableStateOf(ClientMemory.openedPlaylist) }
     // The old list stays hidden until the session has taken this many snapshots (the new list is then in):
     // comparing the lists is not enough, as the new one may be identical to the old one.
     var waitSeq by remember { mutableStateOf<Int?>(null) }
@@ -183,7 +210,24 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     // While the native client is shown, playback runs in the background so commands keep working.
     DisposableEffect(Unit) {
         TerminalHub.setBackgroundPlayback(true)
-        onDispose { TerminalHub.setBackgroundPlayback(false) }
+        onDispose {
+            TerminalHub.setBackgroundPlayback(false)
+            // The list yewtube holds outlives this screen; the tab and typed text only if the app is not closing.
+            ClientMemory.resultsFrom = resultsFrom
+            ClientMemory.lastQuery = lastQuery
+            ClientMemory.searchKept = searchKept
+            if (ctx.activityFinishing()) {
+                ClientMemory.section = null
+                ClientMemory.query = ""
+                ClientMemory.openedPlaylist = null
+                ClientMemory.startupDone = false
+            } else {
+                ClientMemory.section = section
+                ClientMemory.query = query
+                ClientMemory.openedPlaylist = openedPlaylist
+                ClientMemory.startupDone = startupDone
+            }
+        }
     }
     LaunchedEffect(Unit) {
         TerminalHub.ensureStarted(ctx.applicationContext, CLIENT_COLS, CLIENT_ROWS)
