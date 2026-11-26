@@ -277,6 +277,8 @@ private fun SettingsScreen(resumes: Int, onBack: () -> Unit) {
                 }
             }
 
+            ConfigSettings(resumes)
+
             Text(
                 stringResource(R.string.cookies_section), style = section,
                 modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
