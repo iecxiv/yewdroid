@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_title">Settings</string>
+    <string name="settings_permissions_section">App permissions</string>
+    <string name="permission_notifications">Notifications</string>
+    <string name="permission_notifications_desc">Show playback and download notifications</string>
+    <string name="permission_battery">Battery optimization</string>
+    <string name="permission_battery_desc">Keep playback running in the background</string>
+    <string name="settings_open_system">Open system app settings</string>
+    <string name="permission_allowed">Allowed</string>
+    <string name="permission_allow">Allow</string>
+    <string name="main_loading">Loading terminal...</string>
+    <string name="main_terminal">Terminal</string>
+    <string name="main_client_placeholder">Interactive client coming soon.\nSwitch Terminal on to use yewtube.</string>
+    <string name="main_translate_output">Translate output</string>
+    <string name="pref_zoom_save_failed">[settings] Could not save the zoom.</string>
+    <string name="pref_history_save_failed">[history] Could not save the command.</string>
+    <string name="pref_history_read_failed">[history] Could not read the saved history.</string>
+    <string name="pref_mode_save_failed">[settings] Could not save the mode.</string>
+    <string name="pref_language_save_failed">[settings] Could not save the output language.</string>
+    <string name="terminal_resize_failed">[terminal] Could not update the size: %1$s</string>
+    <string name="player_unavailable">[player] playback service unavailable</string>
+</resources>

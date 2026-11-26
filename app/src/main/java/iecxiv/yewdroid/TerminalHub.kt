@@ -69,6 +69,7 @@ object TerminalHub {
     @Volatile private var py: PyObject? = null
     @Volatile private var exo: ExoPlayer? = null
     @Volatile private var nextVideo = false
+    @Volatile private var appContext: Context? = null
     private var surface: SurfaceView? = null
     private var started = false
     private val sink = HubSink()
@@ -88,6 +89,9 @@ object TerminalHub {
             if (playing.value) event("next")
         }
     }
+
+    private fun text(id: Int, vararg args: Any, fallback: String): String =
+        appContext?.getString(id, *args) ?: fallback
 
     fun registerPlayer(p: ExoPlayer) {
         exo = p
@@ -116,11 +120,12 @@ object TerminalHub {
         if (started) return
         started = true
         val dir = ctx.filesDir.absolutePath
-        val appContext = ctx.applicationContext
+        val app = ctx.applicationContext
+        appContext = app
         scope.launch {
             val m = Python.getInstance().getModule("yt_term")
             Python.getInstance().getModule("terminal_layout").callAttr("install", m)
-            val enabled = runCatching { TerminalPreferences.translateOutput(appContext).first() }.getOrDefault(false)
+            val enabled = runCatching { TerminalPreferences.translateOutput(app).first() }.getOrDefault(false)
             val available = runCatching {
                 val i18n = Python.getInstance().getModule("android_i18n")
                 i18n.callAttr("install", m)
@@ -134,7 +139,8 @@ object TerminalHub {
             scope.launch { tick() }
             for ((width, height) in sizes) {
                 runCatching { m.callAttr("resize", width, height) }.onFailure {
-                    onWrite("\n[terminal] Could not update the size: ${it.message}\n")
+                    onWrite("\n" + text(R.string.terminal_resize_failed, it.message.orEmpty(),
+                        fallback = "[terminal] Could not update the size: ${it.message.orEmpty()}") + "\n")
                 }
             }
         }
@@ -187,7 +193,8 @@ object TerminalHub {
         main.post {
             val p = exo
             if (p == null) {
-                onWrite("\n\u001b[31m[player] playback service unavailable\u001b[0m\n")
+                onWrite("\n\u001b[31m" + text(R.string.player_unavailable,
+                    fallback = "[player] playback service unavailable") + "\u001b[0m\n")
                 event("stop")
             } else {
                 val meta = MediaMetadata.Builder().setTitle(title).setArtist(artist)

@@ -42,7 +42,7 @@ object TerminalPreferences {
                     context.terminalDataStore.edit { it[fontSize] = size }
                 } catch (error: IOException) {
                     Log.e("TerminalPreferences", "Cannot save zoom", error)
-                    TerminalHub.onWrite("\n[ajustes] No se pudo guardar el zoom.\n")
+                    TerminalHub.onWrite("\n" + context.getString(R.string.pref_zoom_save_failed) + "\n")
                 }
             }
         }
@@ -55,7 +55,7 @@ object TerminalPreferences {
                     }
                 } catch (error: IOException) {
                     Log.e("TerminalPreferences", "Cannot save command history", error)
-                    TerminalHub.onWrite("\n[historial] No se pudo guardar el comando.\n")
+                    TerminalHub.onWrite("\n" + context.getString(R.string.pref_history_save_failed) + "\n")
                 }
             }
         }
@@ -65,7 +65,7 @@ object TerminalPreferences {
                     context.terminalDataStore.edit { it[terminalModeKey] = enabled }
                 } catch (error: IOException) {
                     Log.e("TerminalPreferences", "Cannot save terminal mode", error)
-                    TerminalHub.onWrite("\n[settings] Could not save the mode.\n")
+                    TerminalHub.onWrite("\n" + context.getString(R.string.pref_mode_save_failed) + "\n")
                 }
             }
         }
@@ -75,7 +75,7 @@ object TerminalPreferences {
                     context.terminalDataStore.edit { it[translateKey] = enabled }
                 } catch (error: IOException) {
                     Log.e("TerminalPreferences", "Cannot save output language", error)
-                    TerminalHub.onWrite("\n[settings] Could not save the output language.\n")
+                    TerminalHub.onWrite("\n" + context.getString(R.string.pref_language_save_failed) + "\n")
                 }
             }
         }
@@ -127,7 +127,7 @@ object TerminalPreferences {
         .catch { error ->
             if (error is IOException) {
                 Log.e("TerminalPreferences", "Cannot read command history", error)
-                TerminalHub.onWrite("\n[historial] No se pudo leer el historial guardado.\n")
+                TerminalHub.onWrite("\n" + context.getString(R.string.pref_history_read_failed) + "\n")
                 emit(emptyPreferences())
             } else throw error
         }

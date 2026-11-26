@@ -51,6 +51,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
@@ -137,7 +138,7 @@ fun TerminalScreen() {
     }
     if (currentZoom == null || savedHistory == null || terminalMode == null) {
         Box(Modifier.fillMaxSize().background(BG).systemBarsPadding(), contentAlignment = Alignment.Center) {
-            Text("Loading terminal...", style = uiStyle)
+            Text(stringResource(R.string.main_loading), style = uiStyle)
         }
         return
     }
@@ -201,12 +202,16 @@ fun TerminalScreen() {
                 Text("A+", color = FG, style = uiStyle, modifier = Modifier
                     .clickableNoRipple { changeZoom(1f) }.padding(12.dp))
                 if (translationAvailable) {
-                    CtrlBtn(Icons.Filled.Language, if (translated) ACCENT else FG) {
+                    CtrlBtn(
+                        Icons.Filled.Language,
+                        if (translated) ACCENT else FG,
+                        stringResource(R.string.main_translate_output)
+                    ) {
                         TerminalHub.setTranslated(ctx, !translated)
                     }
                 }
             }
-            Text("Terminal", color = FG, style = uiStyle.copy(fontSize = 12.sp), modifier = Modifier.padding(end = 6.dp))
+            Text(stringResource(R.string.main_terminal), color = FG, style = uiStyle.copy(fontSize = 12.sp), modifier = Modifier.padding(end = 6.dp))
             Switch(
                 checked = terminalMode,
                 onCheckedChange = {
@@ -222,7 +227,9 @@ fun TerminalScreen() {
                     uncheckedBorderColor = Color(0xFF555555)
                 )
             )
-            CtrlBtn(Icons.Filled.Settings) { ctx.startActivity(Intent(ctx, SettingsActivity::class.java)) }
+            CtrlBtn(Icons.Filled.Settings, description = stringResource(R.string.settings_title)) {
+                ctx.startActivity(Intent(ctx, SettingsActivity::class.java))
+            }
         }
 
         if (showVideo) {
@@ -282,7 +289,7 @@ fun TerminalScreen() {
         } else {
             Box(Modifier.weight(1f).fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
                 Text(
-                    "Interactive client coming soon.\nSwitch Terminal on to use yewtube.",
+                    stringResource(R.string.main_client_placeholder),
                     style = uiStyle.copy(textAlign = TextAlign.Center)
                 )
             }
@@ -480,9 +487,10 @@ private fun VideoSurface(modifier: Modifier) {
 private fun CtrlBtn(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     tint: Color = FG,
+    description: String? = null,
     onClick: () -> Unit
 ) {
-    IconButton(onClick = onClick) { Icon(icon, contentDescription = null, tint = tint) }
+    IconButton(onClick = onClick) { Icon(icon, contentDescription = description, tint = tint) }
 }
 
 private fun Modifier.clickableNoRipple(onClick: () -> Unit): Modifier =

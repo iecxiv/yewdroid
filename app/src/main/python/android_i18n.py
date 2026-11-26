@@ -6,24 +6,35 @@ import threading
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 _ERASE = re.compile(r"(?:\x1b\[[0-9]*K)+$")
 _SPLIT = re.compile(r"(\r\n|\r|\n)")
+_PLACEHOLDER = re.compile(r"(\{#\}|\{\})")
+_TARGET = re.compile(r"\{#?\}")
+_GAPS = re.compile(r"(\s{2,})")
 _LANGUAGE = re.compile(r"[a-z]{2,3}")
+_PARTS = ("", "_yt", "_app", "_help")
 _RESET = "\x1b[0m"
+_HEADINGS = frozenset((
+    "Num Title Length View Rtng Comm Date Time User Like Dslk Category Username Description "
+    "Item Playlist Author Updated Count ID Name Duration Format Quality Media Size Notes Key Value"
+).split()) | {"Video ID"}
 _lock = threading.Lock()
-_state = {"language": None, "enabled": False, "plain": {}, "patterns": []}
+_state = {"language": None, "enabled": False, "plain": {}, "patterns": [], "headings": {}}
 
 
 def _compile(catalog):
     plain, patterns = {}, []
     for source, target in catalog.items():
-        source_pieces = source.split("{}")
-        target_pieces = target.split("{}")
+        pieces = _PLACEHOLDER.split(source)
+        source_pieces, kinds = pieces[0::2], pieces[1::2]
+        target_pieces = _TARGET.split(target)
         if len(source_pieces) != len(target_pieces):
             continue
-        if len(source_pieces) == 1:
+        if not kinds:
             plain[source] = (None, source_pieces, target_pieces)
-        else:
-            regex = re.compile("(.*?)".join(re.escape(piece) for piece in source_pieces), re.DOTALL)
-            patterns.append((regex, source_pieces, target_pieces))
+            continue
+        regex = re.escape(source_pieces[0])
+        for kind, piece in zip(kinds, source_pieces[1:]):
+            regex += (r"(\d+)" if kind == "{#}" else "(.*?)") + re.escape(piece)
+        patterns.append((re.compile(regex, re.DOTALL), source_pieces, target_pieces))
     patterns.sort(key=lambda entry: len(entry[0].pattern), reverse=True)
     return plain, patterns
 
@@ -32,13 +43,18 @@ def configure(tag, enabled):
     language = str(tag or "").replace("_", "-").split("-")[0].lower()
     with _lock:
         if language != _state["language"]:
-            _state.update(language=language, plain={}, patterns=[])
+            _state.update(language=language, plain={}, patterns=[], headings={})
             if _LANGUAGE.fullmatch(language) and language != "en":
-                try:
-                    module = importlib.import_module("i18n_" + language)
-                    _state["plain"], _state["patterns"] = _compile(module.CATALOG)
-                except Exception:
-                    pass
+                catalog, headings = {}, {}
+                for suffix in _PARTS:
+                    try:
+                        module = importlib.import_module("i18n_" + language + suffix)
+                    except Exception:
+                        continue
+                    catalog.update(getattr(module, "CATALOG", {}))
+                    headings.update(getattr(module, "HEADINGS", {}))
+                _state["plain"], _state["patterns"] = _compile(catalog)
+                _state["headings"] = headings
         _state["enabled"] = bool(enabled)
         return bool(_state["plain"] or _state["patterns"])
 
@@ -47,29 +63,85 @@ def set_enabled(enabled):
     _state["enabled"] = bool(enabled)
 
 
+def _parse(line):
+    plain, states, ansi, state, position = [], [], {}, "", 0
+    length = 0
+    for item in _ANSI.finditer(line):
+        chunk = line[position:item.start()]
+        plain.append(chunk)
+        states.extend([state] * len(chunk))
+        length += len(chunk)
+        sequence = item.group()
+        ansi[length] = ansi.get(length, "") + sequence
+        if sequence.endswith("m"):
+            state = "" if sequence in ("\x1b[0m", "\x1b[m") else state + sequence
+        position = item.end()
+    chunk = line[position:]
+    plain.append(chunk)
+    states.extend([state] * len(chunk))
+    return "".join(plain), states, ansi
+
+
+def _translate_header(text, ansi):
+    headings = _state["headings"]
+    parts = _GAPS.split(text)
+    words = [part.strip() for part in parts[0::2] if part.strip()]
+    if len(words) < 2 or not all(word in _HEADINGS for word in words):
+        return None
+    old_starts, offset = [], 0
+    for original in parts:
+        old_starts.append(offset)
+        offset += len(original)
+    for index in range(0, len(parts), 2):
+        word = parts[index]
+        new = headings.get(word)
+        if not word or not new:
+            continue
+        if index + 1 < len(parts):
+            gap = index + 1
+        elif index - 1 >= 0:
+            gap = index - 1
+        else:
+            continue
+        room = len(word) + len(parts[gap]) - 1
+        new = new[:room]
+        parts[index] = new
+        parts[gap] = " " * (len(word) + len(parts[gap]) - len(new))
+    new_starts, offset = [], 0
+    for part in parts:
+        new_starts.append(offset)
+        offset += len(part)
+    result = "".join(parts)
+    inserts = {}
+    for position, sequence in ansi.items():
+        target = len(result)
+        if position < len(text):
+            part = max(i for i, start in enumerate(old_starts) if start <= position)
+            target = new_starts[part] + min(position - old_starts[part], len(parts[part]))
+        inserts[target] = inserts.get(target, "") + sequence
+    out = []
+    for index in range(len(result) + 1):
+        out.append(inserts.get(index, ""))
+        if index < len(result):
+            out.append(result[index])
+    return "".join(out)
+
+
 def _translate_line(line):
     tail = ""
     erase = _ERASE.search(line)
     if erase:
         tail, line = erase.group(), line[:erase.start()]
-    sequences = list(_ANSI.finditer(line))
-    if any(not item.group().endswith("m") for item in sequences):
+    if any(not item.group().endswith("m") for item in _ANSI.finditer(line)):
         return line + tail
-    plain, states, state, position = [], [], "", 0
-    for item in sequences:
-        chunk = line[position:item.start()]
-        plain.append(chunk)
-        states.extend([state] * len(chunk))
-        sequence = item.group()
-        state = "" if sequence in ("\x1b[0m", "\x1b[m") else state + sequence
-        position = item.end()
-    chunk = line[position:]
-    plain.append(chunk)
-    states.extend([state] * len(chunk))
-    text = "".join(plain)
+    text, states, ansi = _parse(line)
     body = text.strip()
     if not body:
         return line + tail
+    if _state["headings"]:
+        header = _translate_header(text, ansi)
+        if header is not None:
+            return header + tail
     lead = len(text) - len(text.lstrip())
     trail = len(text) - len(text.rstrip())
     entry = _state["plain"].get(body)
@@ -111,7 +183,7 @@ def _translate_line(line):
             emit(state_at(match.start(k + 1)) if groups[k] else default, groups[k])
     if current:
         out.append(_RESET)
-    padding = max(trail - (len("".join(shown)) - len(body)), 0) if trail else 0
+    padding = max(trail - (len("".join(shown)) - len(body)), 1) if trail else 0
     return " " * lead + "".join(out) + " " * padding + tail
 
 

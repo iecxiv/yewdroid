@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -118,16 +119,24 @@ private fun SettingsScreen(resumes: Int, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().background(BG).systemBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = FG) }
-            Text("Settings", style = title)
+            Text(stringResource(R.string.settings_title), style = title)
         }
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
-            Text("App permissions", style = section, modifier = Modifier.padding(vertical = 8.dp))
-            PermissionRow("Notifications", "Show playback and download notifications", notificationsAllowed) { allowNotifications() }
-            PermissionRow("Battery optimization", "Keep playback running in the background", batteryAllowed) { allowBattery() }
+            Text(stringResource(R.string.settings_permissions_section), style = section, modifier = Modifier.padding(vertical = 8.dp))
+            PermissionRow(
+                stringResource(R.string.permission_notifications),
+                stringResource(R.string.permission_notifications_desc),
+                notificationsAllowed
+            ) { allowNotifications() }
+            PermissionRow(
+                stringResource(R.string.permission_battery),
+                stringResource(R.string.permission_battery_desc),
+                batteryAllowed
+            ) { allowBattery() }
             TextButton(
                 onClick = { openFirst(ctx, appDetails(ctx)) },
                 colors = ButtonDefaults.textButtonColors(contentColor = ACCENT)
-            ) { Text("Open system app settings") }
+            ) { Text(stringResource(R.string.settings_open_system)) }
         }
     }
 }
@@ -140,9 +149,11 @@ private fun PermissionRow(name: String, description: String, allowed: Boolean, o
             Text(description, style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = Color.Gray))
         }
         if (allowed) {
-            Text("Allowed", style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp, color = ACCENT))
+            Text(stringResource(R.string.permission_allowed), style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp, color = ACCENT))
         } else {
-            TextButton(onClick = onAllow, colors = ButtonDefaults.textButtonColors(contentColor = ACCENT)) { Text("Allow") }
+            TextButton(onClick = onAllow, colors = ButtonDefaults.textButtonColors(contentColor = ACCENT)) {
+                Text(stringResource(R.string.permission_allow))
+            }
         }
     }
 }
