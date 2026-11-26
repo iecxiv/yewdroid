@@ -102,6 +102,17 @@ def set_background(on):
     return None
 
 
+def _yewtube():
+    """(config, g) once the session has loaded yewtube, or None before that. The app calls into this module
+    before the session starts (and every second afterwards), and importing yewtube then would fail: its
+    package needs the pip stand-in that the session installs when it starts."""
+    config = sys.modules.get("mps_youtube.config")
+    g = sys.modules.get("mps_youtube.g")
+    if config is None or g is None:
+        return None
+    return config, g
+
+
 def player_event(action):
     try:
         from mps_youtube import g
@@ -116,7 +127,10 @@ def sync_video_mode():
     """True when the "show video" setting changed and the track playing has the other kind of stream.
     The app calls it every second; it also runs while nothing plays, to keep the last value current."""
     try:
-        from mps_youtube import config, g
+        modules = _yewtube()
+        if modules is None:
+            return False
+        config, g = modules
         wanted = bool(config.SHOW_VIDEO.get)
         previous = _last_video[0]
         _last_video[0] = wanted
@@ -145,8 +159,11 @@ def set_play_mode(shuffle, repeat):
     _mode["shuffle"] = bool(shuffle)
     _mode["repeat"] = int(repeat)
     try:
-        from mps_youtube import g
-        p = g.PLAYER_OBJ
+        modules = _yewtube()
+        if modules is None:
+            # The session is not up yet: the new mode is applied when the first playback starts.
+            return
+        p = getattr(modules[1], "PLAYER_OBJ", None)
         if getattr(p, "_active", False) and hasattr(p, "apply_shuffle"):
             p.apply_shuffle(_mode["shuffle"])
     except Exception:
