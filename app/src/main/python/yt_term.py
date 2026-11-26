@@ -33,6 +33,10 @@ _T0 = time.monotonic()
 _T = {"play": None}
 # Longest a preload waits for the track being started to get its stream (seconds).
 _PRELOAD_WAIT = 20.0
+# Channel name of each video yt-dlp has looked up (video id -> name), for tracks without search metadata.
+_UPLOADERS = {}
+# Artist shown when the channel of a track is unknown.
+_DEFAULT_ARTIST = "YewDroid"
 
 
 def _tlog(message):
@@ -41,6 +45,40 @@ def _tlog(message):
         _orig_err.write("[time] +%.1fs %s\n" % (time.monotonic() - _T0, message))
     except Exception:
         pass
+
+
+def _clean_artist(name):
+    """Channel name as an artist: YouTube's auto-generated channels end in ' - Topic'."""
+    text = str(name or "").strip()
+    if text.endswith(" - Topic"):
+        text = text[:-len(" - Topic")].strip()
+    return "" if text in ("", "?") else text
+
+
+def _remember_uploader(info):
+    """Keeps the channel name from the result of a yt-dlp lookup."""
+    if isinstance(info, dict) and info.get("id"):
+        name = _clean_artist(info.get("uploader") or info.get("channel"))
+        if name:
+            _UPLOADERS[str(info["id"])] = name
+
+
+def _artist(song):
+    """Artist of a track for the notification and the car: the channel name from the search results,
+    else the one yt-dlp reported, else the app's name."""
+    ytid = getattr(song, "ytid", None)
+    try:
+        g = _loaded("g")
+        meta = g.meta.get(ytid, {}) if g is not None else {}
+        name = _clean_artist(meta.get("uploaderName"))
+        if name:
+            return name
+    except Exception:
+        pass
+    name = _UPLOADERS.get(str(ytid))
+    if name:
+        return name
+    return _clean_artist(getattr(song, "uploader", None) or getattr(song, "author", None)) or _DEFAULT_ARTIST
 
 
 class _Out:
@@ -365,7 +403,8 @@ def _patch_subprocess_timing():
 
 def _patch_js_runtime():
     """Injects js_runtimes=quickjs and the imported YouTube cookies (files_dir/cookies.txt, when
-    present) into every yt_dlp.YoutubeDL instance. Also logs the time of each extract_info call."""
+    present) into every yt_dlp.YoutubeDL instance. Also logs the time of each extract_info call and keeps
+    the channel name of every video it looks up."""
     import yt_dlp
     qjs = _find_qjs()
     if qjs:
@@ -404,9 +443,15 @@ def _patch_js_runtime():
         def extract_info(self, url, *args, **kwargs):
             started = time.monotonic()
             before = list(self._net)
+            info = None
             try:
-                return super().extract_info(url, *args, **kwargs)
+                info = super().extract_info(url, *args, **kwargs)
+                return info
             finally:
+                try:
+                    _remember_uploader(info)
+                except Exception:
+                    pass
                 try:
                     _tlog("extract_info took %.1fs (%d requests, %.1fs until the first byte of each) %s" % (
                         time.monotonic() - started, self._net[1] - before[1],
@@ -631,8 +676,7 @@ def _make_player_class(CmdPlayer):
                 self._action = "next"
                 self._active = True
                 song = self.song
-                artist = (getattr(song, "uploader", None)
-                          or getattr(song, "author", None) or "yewtube")
+                artist = _artist(song)
                 thumb = "https://i.ytimg.com/vi/%s/hqdefault.jpg" % song.ytid
                 video = isinstance(self.stream, dict) and self.stream.get("mtype") == "video"
                 if _T["play"] is not None:
