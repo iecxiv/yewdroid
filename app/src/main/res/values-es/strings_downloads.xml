@@ -1,23 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="client_tab_downloads">Descargas</string>
-    <string name="downloads_empty">Aún no hay descargas.</string>
-    <string name="downloads_clear">Limpiar terminadas</string>
-    <string name="downloads_cancel">Cancelar</string>
-    <string name="downloads_status_queued">En espera…</string>
-    <string name="downloads_stage_video">Descargando vídeo</string>
-    <string name="downloads_stage_audio">Descargando audio</string>
-    <string name="downloads_stage_merge">Uniendo pistas</string>
-    <string name="downloads_stage_export">Guardando en Descargas</string>
-    <string name="downloads_done">Guardado en Descargas</string>
-    <string name="downloads_cancelled">Cancelada</string>
-    <string name="downloads_error">Falló</string>
-    <string name="downloads_kind_audio">Audio</string>
-    <string name="downloads_kind_video">Vídeo</string>
-    <string name="downloads_format_title_audio">Descargar audio</string>
-    <string name="downloads_format_title_video">Descargar vídeo</string>
-    <string name="downloads_format_loading">Leyendo los formatos disponibles…</string>
-    <string name="downloads_format_error">No se pudieron leer los formatos: %1$s</string>
-    <string name="downloads_format_none">No se encontraron formatos descargables.</string>
-    <string name="downloads_recommended">recomendado</string>
+    <string name="download_choose_audio">Elegir calidad de audio</string>
+    <string name="download_choose_video">Elegir calidad de vídeo</string>
+    <string name="download_loading">Cargando formatos…</string>
+    <string name="download_formats_failed">No se pudieron leer los formatos de este vídeo. Aún puedes descargar el mejor disponible.</string>
+    <string name="download_start">Descargar</string>
+    <string name="download_best">El mejor disponible</string>
+    <string name="download_cancel">Cancelar</string>
+    <string name="downloads_empty">Aún no hay descargas.\nUsa el menú ⋮ de un resultado para descargar.</string>
+    <string name="downloads_clear">Quitar terminadas</string>
+    <string name="download_kind_audio">Audio</string>
+    <string name="download_kind_video">Vídeo</string>
+    <string name="download_queued">En cola</string>
+    <string name="download_stage_audio">Descargando audio</string>
+    <string name="download_stage_video">Descargando vídeo</string>
+    <string name="download_stage_merging">Uniendo audio y vídeo</string>
+    <string name="download_stage_exporting">Exportando a Descargas</string>
+    <string name="download_done">Guardado: %1$s</string>
+    <string name="download_cancelled">Cancelada</string>
+    <string name="download_failed">Error: %1$s</string>
 </resources>
