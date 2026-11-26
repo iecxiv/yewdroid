@@ -164,13 +164,8 @@ fun TerminalScreen() {
     val lines by TerminalHub.lines.collectAsState()
     val playing by TerminalHub.playing.collectAsState()
     val audioOn by TerminalHub.audioOn.collectAsState()
-    val now by TerminalHub.nowPlaying.collectAsState()
     val videoOn by TerminalHub.videoOn.collectAsState()
     val videoAspect by TerminalHub.videoAspect.collectAsState()
-    val position by TerminalHub.positionMs.collectAsState()
-    val duration by TerminalHub.durationMs.collectAsState()
-    val shuffle by TerminalHub.shuffle.collectAsState()
-    val repeat by TerminalHub.repeat.collectAsState()
     val translationAvailable by TerminalHub.translationAvailable.collectAsState()
     val translated by TerminalHub.translated.collectAsState()
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -190,6 +185,9 @@ fun TerminalScreen() {
             dismissed = false
         }
     }
+    // In the UI the video lives in the expanded player: it opens when a video starts (or when switching to the UI
+    // with one playing), and closes on stop, so the tabs below never move.
+    LaunchedEffect(showVideo, terminalMode) { if (showVideo && !terminalMode) playerOpen = true }
     fun enterFullscreen() {
         if (landscape) dismissed = false else manualFull = true
     }
@@ -298,38 +296,9 @@ fun TerminalScreen() {
             }
         }
 
-        if (showVideo) {
-            var overlay by remember { mutableStateOf(true) }
-            var tick by remember { mutableIntStateOf(0) }
-            var dragging by remember { mutableStateOf(false) }
-            LaunchedEffect(overlay, tick, dragging) {
-                if (overlay && !dragging) {
-                    delay(AUTO_HIDE_MS)
-                    overlay = false
-                }
-            }
-            Box(
-                Modifier.fillMaxWidth().background(Color.Black).clickableNoRipple { overlay = !overlay },
-                contentAlignment = Alignment.Center
-            ) {
-                val ratio = videoAspect.coerceIn(1f, 2.4f)
-                VideoSurface(
-                    if (landscape) Modifier.height(150.dp).aspectRatio(ratio)
-                    else Modifier.fillMaxWidth().aspectRatio(ratio)
-                )
-                if (overlay) {
-                    Box(Modifier.align(Alignment.TopEnd).background(Color(0x66000000))) {
-                        CtrlBtn(Icons.Filled.Fullscreen) { enterFullscreen() }
-                    }
-                    SeekBar(
-                        Modifier.align(Alignment.BottomCenter).background(Color(0x66000000)),
-                        onInteract = { tick++ },
-                        onDragChange = { dragging = it }
-                    )
-                }
-            }
-            // In the UI the controls sit between the video and the tabs (the terminal has its own below).
-            if (!terminalMode) PlaybackControls(audioOn, Modifier.fillMaxWidth().padding(horizontal = 8.dp))
+        // The terminal shows the video above its text; the UI keeps it inside the expanded player.
+        if (showVideo && terminalMode) {
+            InlineVideo(landscape, videoAspect) { enterFullscreen() }
         }
 
         if (terminalMode) {
@@ -358,43 +327,18 @@ fun TerminalScreen() {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 ClientScreen(Modifier.fillMaxSize())
                 if (playing && playerOpen) {
-                    PlayerScreen(onClose = { playerOpen = false }, modifier = Modifier.fillMaxSize())
+                    PlayerScreen(
+                        onClose = { playerOpen = false },
+                        onFullscreen = { enterFullscreen() },
+                        modifier = Modifier.fillMaxSize()
+                    )
                 }
             }
         }
 
         if (terminalMode) {
             // Playback never blocks the session, so the prompt stays available while something plays.
-            if (playing) {
-                Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            now, color = ACCENT, style = uiStyle, maxLines = 1,
-                            overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
-                        )
-                        Text(
-                            formatTime(position) + " / " + formatTime(duration),
-                            color = FG, style = uiStyle.copy(fontSize = 11.sp), maxLines = 1
-                        )
-                        CtrlBtn(
-                            Icons.Filled.Shuffle, if (shuffle) ACCENT else FG,
-                            stringResource(R.string.player_shuffle)
-                        ) { TerminalHub.toggleShuffle() }
-                        CtrlBtn(
-                            if (repeat == 2) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
-                            if (repeat == 0) FG else ACCENT,
-                            stringResource(
-                                when (repeat) {
-                                    1 -> R.string.player_repeat_all
-                                    2 -> R.string.player_repeat_one
-                                    else -> R.string.player_repeat_off
-                                }
-                            )
-                        ) { TerminalHub.cycleRepeat() }
-                    }
-                    PlaybackControls(audioOn, Modifier.fillMaxWidth())
-                }
-            }
+            if (playing) TerminalPlayingBar(audioOn)
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("^C", color = FG, style = uiStyle, modifier = Modifier.padding(8.dp).clickableNoRipple { TerminalHub.interrupt() })
                 BasicTextField(
@@ -434,6 +378,79 @@ fun TerminalScreen() {
         } else if (playing) {
             if (!playerOpen) MiniPlayer(onOpen = { playerOpen = true })
         }
+    }
+}
+
+/** The video above the terminal text, with a fullscreen button and the time bar that hide after a few seconds. */
+@Composable
+private fun InlineVideo(landscape: Boolean, videoAspect: Float, onFullscreen: () -> Unit) {
+    var overlay by remember { mutableStateOf(true) }
+    var tick by remember { mutableIntStateOf(0) }
+    var dragging by remember { mutableStateOf(false) }
+    LaunchedEffect(overlay, tick, dragging) {
+        if (overlay && !dragging) {
+            delay(AUTO_HIDE_MS)
+            overlay = false
+        }
+    }
+    Box(
+        Modifier.fillMaxWidth().background(Color.Black).clickableNoRipple { overlay = !overlay },
+        contentAlignment = Alignment.Center
+    ) {
+        val ratio = videoAspect.coerceIn(1f, 2.4f)
+        VideoSurface(
+            if (landscape) Modifier.height(150.dp).aspectRatio(ratio)
+            else Modifier.fillMaxWidth().aspectRatio(ratio)
+        )
+        if (overlay) {
+            Box(Modifier.align(Alignment.TopEnd).background(Color(0x66000000))) {
+                CtrlBtn(Icons.Filled.Fullscreen) { onFullscreen() }
+            }
+            SeekBar(
+                Modifier.align(Alignment.BottomCenter).background(Color(0x66000000)),
+                onInteract = { tick++ },
+                onDragChange = { dragging = it }
+            )
+        }
+    }
+}
+
+/** The terminal's playback row: title, time, shuffle and repeat, and the playback buttons. */
+@Composable
+private fun TerminalPlayingBar(audioOn: Boolean) {
+    val now by TerminalHub.nowPlaying.collectAsState()
+    val position by TerminalHub.positionMs.collectAsState()
+    val duration by TerminalHub.durationMs.collectAsState()
+    val shuffle by TerminalHub.shuffle.collectAsState()
+    val repeat by TerminalHub.repeat.collectAsState()
+    val uiStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = FG)
+    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                now, color = ACCENT, style = uiStyle, maxLines = 1,
+                overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
+            )
+            Text(
+                formatTime(position) + " / " + formatTime(duration),
+                color = FG, style = uiStyle.copy(fontSize = 11.sp), maxLines = 1
+            )
+            CtrlBtn(
+                Icons.Filled.Shuffle, if (shuffle) ACCENT else FG,
+                stringResource(R.string.player_shuffle)
+            ) { TerminalHub.toggleShuffle() }
+            CtrlBtn(
+                if (repeat == 2) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
+                if (repeat == 0) FG else ACCENT,
+                stringResource(
+                    when (repeat) {
+                        1 -> R.string.player_repeat_all
+                        2 -> R.string.player_repeat_one
+                        else -> R.string.player_repeat_off
+                    }
+                )
+            ) { TerminalHub.cycleRepeat() }
+        }
+        PlaybackControls(audioOn, Modifier.fillMaxWidth())
     }
 }
 
@@ -583,8 +600,9 @@ private fun FullscreenControls(onExit: () -> Unit, modifier: Modifier) {
     }
 }
 
+/** The video surface the player draws on; the host decides where it goes (inline, expanded player or mini player). */
 @Composable
-private fun VideoSurface(modifier: Modifier) {
+internal fun VideoSurface(modifier: Modifier) {
     val context = LocalContext.current
     val view = remember { SurfaceView(context) }
     DisposableEffect(view) {
