@@ -234,6 +234,8 @@ object TerminalHub {
         videoOn.value = nextVideo
         positionMs.value = 0L
         durationMs.value = 0L
+        // yewtube stays inside playback until the track ends, so it is playing, not busy.
+        _client.value = _client.value.copy(busy = false)
         main.post {
             val p = exo
             if (p == null) {
