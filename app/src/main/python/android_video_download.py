@@ -14,11 +14,17 @@ def _publish(path):
     return str(jclass("iecxiv.yewdroid.DownloadPublisher").publish(app, path))
 
 
-def download_video(ytid, folder, hook):
+def download_video(ytid, folder, hook, height=None, stage=None):
+    """Downloads video + audio and merges them. `height` caps the resolution (None: best);
+    `stage` is an optional callback told which step starts (video, audio, merge, export)."""
     import yt_dlp
     from java import jclass
     from yt_dlp.utils import sanitize_filename
 
+    note = stage or (lambda name: None)
+    video_selector = "bv[ext=mp4][vcodec^=avc1]"
+    if height:
+        video_selector += "[height<=%d]" % int(height)
     folder = os.path.abspath(folder)
     os.makedirs(folder, exist_ok=True)
     muxer = jclass("iecxiv.yewdroid.Mp4Muxer")
@@ -49,7 +55,9 @@ def download_video(ytid, folder, hook):
                 raise RuntimeError("Incomplete track: %s" % label)
             return info, path
 
-        vi, video = fetch("video", "bv[ext=mp4][vcodec^=avc1]")
+        note("video")
+        vi, video = fetch("video", video_selector)
+        note("audio")
         _, audio = fetch("audio", "ba[ext=m4a][acodec^=mp4a]")
         title = sanitize_filename(str(vi.get("title") or "video"), restricted=False)[:120]
         safe_id = sanitize_filename(str(ytid), restricted=True)[:32]
@@ -57,10 +65,12 @@ def download_video(ytid, folder, hook):
         # Track filenames must remain distinct even for a pathological title/id.
         if output in (video, audio):
             output = os.path.join(work, "result.mp4")
+        note("merge")
         print("\n[download] Merging video and audio without re-encoding...")
         muxer.merge(video, audio, output)
         if not os.path.isfile(output) or os.path.getsize(output) == 0:
             raise RuntimeError("The muxer did not produce a valid MP4")
+        note("export")
         print("[download] Exporting to public Downloads...")
         destination = _publish(output)
         # On Android 8/9 the local output is the final file: do not delete it.
@@ -68,6 +78,9 @@ def download_video(ytid, folder, hook):
             print("\nSaved locally: %s" % destination)
             return destination
     except BaseException as exc:
+        if type(exc).__name__ == "DownloadCancelled":
+            shutil.rmtree(work, ignore_errors=True)
+            raise
         message = "Video download/export interrupted. Files kept in: %s" % work
         print(message)
         if isinstance(exc, Exception):

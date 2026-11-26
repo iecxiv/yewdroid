@@ -37,6 +37,8 @@ interface TermSink {
     fun stopPlayback()
     /** yewtube is waiting for a command (the native client refreshes its results). */
     fun idle()
+    /** The download queue changed; [state] is the JSON from android_downloads.state(). */
+    fun downloads(state: String)
 }
 
 /** Public named class so Chaquopy can call it from Python. */
@@ -49,6 +51,7 @@ class HubSink : TermSink {
     override fun mode(playing: Boolean) { TerminalHub.playing.value = playing }
     override fun stopPlayback() { TerminalHub.onStopPlayback() }
     override fun idle() { TerminalHub.onIdle() }
+    override fun downloads(state: String) { TerminalHub.onDownloads(state) }
 }
 
 object TerminalHub {
@@ -61,6 +64,8 @@ object TerminalHub {
     val queue: StateFlow<QueueState> = _queue
     private val _playlists = MutableStateFlow(PlaylistsState())
     val playlists: StateFlow<PlaylistsState> = _playlists
+    private val _downloads = MutableStateFlow(DownloadsState())
+    val downloads: StateFlow<DownloadsState> = _downloads
     val playing = MutableStateFlow(false)
     val audioOn = MutableStateFlow(false)
     val nowPlaying = MutableStateFlow("")
@@ -247,6 +252,42 @@ object TerminalHub {
         if (py == null) return
         _client.value = _client.value.copy(busy = true)
         scope.launch { runCatching { py?.callAttr("send", line) } }
+    }
+
+    /** The download queue changed (called from the Python worker thread). */
+    fun onDownloads(state: String) {
+        runCatching { _downloads.value = parseDownloadsState(state) }
+    }
+
+    /** Reads the audio and video qualities available for a video (blocking network call). */
+    suspend fun loadFormats(ytid: String): Result<FormatList> = withContext(Dispatchers.IO) {
+        runCatching {
+            parseFormatList(
+                Python.getInstance().getModule("android_downloads").callAttr("formats", ytid).toString()
+            )
+        }
+    }
+
+    /** Queues a download; [option] is a format id (audio) or a maximum height (video). */
+    fun enqueueDownload(ytid: String, title: String, kind: String, option: String, label: String) {
+        scope.launch {
+            runCatching {
+                Python.getInstance().getModule("android_downloads")
+                    .callAttr("enqueue", ytid, title, kind, option, label)
+            }
+        }
+    }
+
+    fun cancelDownload(id: Int) {
+        scope.launch {
+            runCatching { Python.getInstance().getModule("android_downloads").callAttr("cancel", id) }
+        }
+    }
+
+    fun clearFinishedDownloads() {
+        scope.launch {
+            runCatching { Python.getInstance().getModule("android_downloads").callAttr("clear_finished") }
+        }
     }
 
     /** Reads the tracks of the current playback (called each time a track starts). */

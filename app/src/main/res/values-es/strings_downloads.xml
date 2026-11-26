@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="client_tab_downloads">Descargas</string>
+    <string name="downloads_empty">Aún no hay descargas.</string>
+    <string name="downloads_clear">Limpiar terminadas</string>
+    <string name="downloads_cancel">Cancelar</string>
+    <string name="downloads_status_queued">En espera…</string>
+    <string name="downloads_stage_video">Descargando vídeo</string>
+    <string name="downloads_stage_audio">Descargando audio</string>
+    <string name="downloads_stage_merge">Uniendo pistas</string>
+    <string name="downloads_stage_export">Guardando en Descargas</string>
+    <string name="downloads_done">Guardado en Descargas</string>
+    <string name="downloads_cancelled">Cancelada</string>
+    <string name="downloads_error">Falló</string>
+    <string name="downloads_kind_audio">Audio</string>
+    <string name="downloads_kind_video">Vídeo</string>
+    <string name="downloads_format_title_audio">Descargar audio</string>
+    <string name="downloads_format_title_video">Descargar vídeo</string>
+    <string name="downloads_format_loading">Leyendo los formatos disponibles…</string>
+    <string name="downloads_format_error">No se pudieron leer los formatos: %1$s</string>
+    <string name="downloads_format_none">No se encontraron formatos descargables.</string>
+    <string name="downloads_recommended">recomendado</string>
+</resources>

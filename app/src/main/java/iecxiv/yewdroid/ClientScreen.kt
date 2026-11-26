@@ -68,7 +68,8 @@ private const val CLIENT_ROWS = 24
 private enum class Section(val label: Int) {
     SEARCH(R.string.client_tab_search),
     PLAYLISTS(R.string.client_tab_playlists),
-    HISTORY(R.string.client_tab_history)
+    HISTORY(R.string.client_tab_history),
+    DOWNLOADS(R.string.client_tab_downloads)
 }
 
 /**
@@ -76,12 +77,10 @@ private enum class Section(val label: Int) {
  */
 private fun selection(n: Int, queueRest: Boolean) = if (queueRest) "$n-" else "$n"
 
-/** Menu actions before "Add to playlist": label to the yewtube command for result number n. */
+/** Menu actions before the downloads: label to the yewtube command for result number n. */
 private val PLAY_ACTIONS: List<Pair<Int, (Int, Boolean) -> String>> = listOf(
     R.string.client_play_audio to { n, queueRest -> "${selection(n, queueRest)} -a" },
-    R.string.client_play_video to { n, queueRest -> "${selection(n, queueRest)} -w" },
-    R.string.client_download_audio to { n, _ -> "da $n" },
-    R.string.client_download_video to { n, _ -> "dv $n" }
+    R.string.client_play_video to { n, queueRest -> "${selection(n, queueRest)} -w" }
 )
 
 /** Menu actions after "Add to playlist". */
@@ -103,6 +102,7 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     var focused by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     var adding by remember { mutableStateOf<Int?>(null) }
+    var downloading by remember { mutableStateOf<Pair<ClientItem, String>?>(null) }
     var clearingHistory by remember { mutableStateOf(false) }
     val autoQueueFlow = remember(ctx.applicationContext) { TerminalPreferences.clientAutoQueue(ctx.applicationContext) }
     val savedAutoQueue by autoQueueFlow.collectAsState(initial = null)
@@ -152,6 +152,7 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                         color = if (section == tab) ACCENT else MUTED,
                         textAlign = TextAlign.Center
                     ),
+                    maxLines = 1,
                     modifier = Modifier.weight(1f).clickable { select(tab) }.padding(vertical = 10.dp)
                 )
             }
@@ -162,6 +163,8 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                 onOpened = { section = Section.SEARCH },
                 modifier = Modifier.weight(1f).fillMaxWidth()
             )
+        } else if (section == Section.DOWNLOADS) {
+            DownloadsScreen(Modifier.weight(1f).fillMaxWidth())
         } else {
             if (section == Section.SEARCH) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -269,7 +272,8 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                             item,
                             playlist = state.mode == "ytpl",
                             queueRest = autoQueue ?: true,
-                            onAdd = { adding = it }
+                            onAdd = { adding = it },
+                            onDownload = { kind -> downloading = item to kind }
                         )
                     }
                 }
@@ -319,6 +323,18 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                 adding = null
             },
             onDismiss = { adding = null }
+        )
+    }
+    downloading?.let { (item, kind) ->
+        FormatDialog(
+            ytid = item.id,
+            title = item.title,
+            kind = kind,
+            onStarted = {
+                downloading = null
+                select(Section.DOWNLOADS)
+            },
+            onDismiss = { downloading = null }
         )
     }
     if (clearingHistory) {
@@ -380,7 +396,13 @@ private fun SearchHistoryPanel(
 }
 
 @Composable
-private fun ResultRow(item: ClientItem, playlist: Boolean, queueRest: Boolean, onAdd: (Int) -> Unit) {
+private fun ResultRow(
+    item: ClientItem,
+    playlist: Boolean,
+    queueRest: Boolean,
+    onAdd: (Int) -> Unit,
+    onDownload: (String) -> Unit
+) {
     var menu by remember { mutableStateOf(false) }
     val titleStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = FG)
     val subtitleStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = MUTED)
@@ -434,6 +456,20 @@ private fun ResultRow(item: ClientItem, playlist: Boolean, queueRest: Boolean, o
                             }
                         )
                     }
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.client_download_audio)) },
+                        onClick = {
+                            menu = false
+                            onDownload("audio")
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.client_download_video)) },
+                        onClick = {
+                            menu = false
+                            onDownload("video")
+                        }
+                    )
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.client_add)) },
                         onClick = {

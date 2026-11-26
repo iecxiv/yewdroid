@@ -12,8 +12,11 @@ def _clean(message):
     return re.sub(r"https?://\S+", "<URL>", str(message))
 
 
-def download_audio(ytid, folder, publish):
+def download_audio(ytid, folder, publish, format_id=None, hook=None, stage=None):
+    """`format_id` picks a specific audio format (None: best m4a); `hook` receives yt-dlp progress
+    (None: progress is printed); `stage` is told which step starts (audio, export)."""
     import yt_dlp
+    note = stage or (lambda name: None)
     folder = os.path.abspath(folder)
     os.makedirs(folder, exist_ok=True)
     work = tempfile.mkdtemp(prefix=".yewdroid-audio-", dir=folder)
@@ -49,12 +52,20 @@ def download_audio(ytid, folder, publish):
         candidates = preferred or audio
         if not candidates:
             raise RuntimeError("No downloadable audio track in this extraction")
-        chosen = candidates[-1]
+        chosen = None
+        if format_id:
+            chosen = next((fmt for fmt in audio
+                           if str(fmt.get("format_id")) == str(format_id)), None)
+        if chosen is None:
+            chosen = candidates[-1]
         report["selected_format"] = chosen.get("format_id")
         print("[audio] Format %s (%s)" % (chosen.get("format_id"), chosen.get("ext")))
         yield chosen
 
     def progress(data):
+        if hook is not None:
+            hook(data)
+            return
         if data.get("status") == "downloading":
             total = data.get("total_bytes") or data.get("total_bytes_estimate") or 0
             if total:
@@ -78,6 +89,7 @@ def download_audio(ytid, folder, publish):
             "Live streams are not supported" if info.get("is_live") else None),
     }
     try:
+        note("audio")
         with yt_dlp.YoutubeDL(options) as ydl:
             report["js_runtimes"] = list((ydl.params.get("js_runtimes") or {}).keys())
             info = ydl.extract_info("https://www.youtube.com/watch?v=%s" % ytid, download=True)
@@ -90,11 +102,15 @@ def download_audio(ytid, folder, publish):
             raise RuntimeError("Unexpected audio path")
         if not os.path.isfile(path) or os.path.getsize(path) == 0:
             raise RuntimeError("Audio file is missing or empty")
+        note("export")
         print("\n[audio] Exporting finished file...")
         destination = publish(path)
         if not isinstance(destination, str) or not destination:
             raise RuntimeError("The export did not confirm the destination")
     except BaseException as error:
+        if type(error).__name__ == "DownloadCancelled":
+            shutil.rmtree(work, ignore_errors=True)
+            raise
         report["error"] = _clean(error)
         report["warnings"] = list(warnings)
         diagnostic = os.path.join(work, "diagnostic.json")

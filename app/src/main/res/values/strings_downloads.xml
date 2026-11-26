@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="client_tab_downloads">Downloads</string>
+    <string name="downloads_empty">No downloads yet.</string>
+    <string name="downloads_clear">Clear finished</string>
+    <string name="downloads_cancel">Cancel</string>
+    <string name="downloads_status_queued">Waiting…</string>
+    <string name="downloads_stage_video">Downloading video</string>
+    <string name="downloads_stage_audio">Downloading audio</string>
+    <string name="downloads_stage_merge">Merging tracks</string>
+    <string name="downloads_stage_export">Saving to Downloads</string>
+    <string name="downloads_done">Saved to Downloads</string>
+    <string name="downloads_cancelled">Cancelled</string>
+    <string name="downloads_error">Failed</string>
+    <string name="downloads_kind_audio">Audio</string>
+    <string name="downloads_kind_video">Video</string>
+    <string name="downloads_format_title_audio">Download audio</string>
+    <string name="downloads_format_title_video">Download video</string>
+    <string name="downloads_format_loading">Reading available formats…</string>
+    <string name="downloads_format_error">Could not read the formats: %1$s</string>
+    <string name="downloads_format_none">No downloadable formats were found.</string>
+    <string name="downloads_recommended">recommended</string>
+</resources>
