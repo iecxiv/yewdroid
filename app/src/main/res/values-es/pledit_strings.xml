@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pledit_remove">Quitar de esta lista</string>
+    <string name="pledit_empty">Esta lista está vacía.</string>
+    <string name="pledit_back">Volver a las listas</string>
+</resources>
