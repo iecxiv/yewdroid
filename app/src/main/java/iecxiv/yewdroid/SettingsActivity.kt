@@ -47,12 +47,6 @@ private val BG = Color(0xFF0C0C0C)
 private val FG = Color(0xFFDCDFE4)
 private val ACCENT = Color(0xFF98C379)
 
-/** Output language choices: the stored value and its label. Add a row here when a catalogue is added. */
-private val LANGUAGE_OPTIONS = listOf(
-    "system" to R.string.language_system,
-    "es" to R.string.language_spanish
-)
-
 class SettingsActivity : ComponentActivity() {
     private var resumes by mutableIntStateOf(0)
 
@@ -88,6 +82,12 @@ private fun notificationSettings(ctx: Context) =
 private fun appDetails(ctx: Context) =
     Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + ctx.packageName))
 
+// Terminal language choices: value stored in TerminalPreferences.LANGUAGES and its label.
+private val LANGUAGE_LABELS = mapOf(
+    TerminalPreferences.LANGUAGE_SYSTEM to R.string.language_system,
+    "es" to R.string.language_spanish
+)
+
 @Composable
 private fun SettingsScreen(resumes: Int, onBack: () -> Unit) {
     val ctx = LocalContext.current
@@ -98,12 +98,6 @@ private fun SettingsScreen(resumes: Int, onBack: () -> Unit) {
     val batteryAllowed = remember(resumes, changes) {
         ctx.getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(ctx.packageName) == true
     }
-    val languageFlow = remember(ctx.applicationContext) { TerminalPreferences.terminalLanguage(ctx.applicationContext) }
-    val savedLanguage by languageFlow.collectAsState(initial = null)
-    var pickedLanguage by remember { mutableStateOf<String?>(null) }
-    val language = pickedLanguage ?: savedLanguage
-    val translationAvailable by TerminalHub.translationAvailable.collectAsState()
-    val translationChecked by TerminalHub.translationChecked.collectAsState()
     val notificationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         changes++
         val activity = ctx.findActivity()
@@ -113,6 +107,12 @@ private fun SettingsScreen(resumes: Int, onBack: () -> Unit) {
         }
     }
     val batteryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { changes++ }
+    val languageFlow = remember(ctx.applicationContext) { TerminalPreferences.terminalLanguage(ctx.applicationContext) }
+    val savedLanguage by languageFlow.collectAsState(initial = null)
+    var selectedLanguage by remember { mutableStateOf<String?>(null) }
+    val language = selectedLanguage ?: savedLanguage
+    val translationAvailable by TerminalHub.translationAvailable.collectAsState()
+    val translationKnown by TerminalHub.translationKnown.collectAsState()
 
     fun allowNotifications() {
         val granted = Build.VERSION.SDK_INT < 33 ||
@@ -160,16 +160,15 @@ private fun SettingsScreen(resumes: Int, onBack: () -> Unit) {
                 modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
             )
             Text(stringResource(R.string.language_section_desc), style = hint)
-            if (language != null) {
-                LANGUAGE_OPTIONS.forEach { (value, label) ->
-                    LanguageRow(stringResource(label), language == value) {
-                        pickedLanguage = value
-                        TerminalHub.setLanguage(ctx, value)
-                    }
+            for (value in TerminalPreferences.LANGUAGES) {
+                val label = LANGUAGE_LABELS[value] ?: continue
+                LanguageRow(stringResource(label), selected = language == value) {
+                    selectedLanguage = value
+                    TerminalHub.setLanguage(ctx, value)
                 }
-                if (translationChecked && !translationAvailable) {
-                    Text(stringResource(R.string.language_unavailable), style = hint, modifier = Modifier.padding(top = 4.dp))
-                }
+            }
+            if (language != null && translationKnown && !translationAvailable) {
+                Text(stringResource(R.string.language_unavailable), style = hint, modifier = Modifier.padding(top = 4.dp))
             }
         }
     }

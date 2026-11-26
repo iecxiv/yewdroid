@@ -24,8 +24,9 @@ private val Context.terminalDataStore by preferencesDataStore(name = "terminal_p
 
 object TerminalPreferences {
     private const val MAX_HISTORY = 500
-    /** Output language choices: "system" follows the phone, the rest are language codes with a catalogue. */
-    private val languages = setOf("system", "es")
+    const val LANGUAGE_SYSTEM = "system"
+    /** Values accepted for the terminal language: "system" or an i18n_<code> catalogue. */
+    val LANGUAGES = listOf(LANGUAGE_SYSTEM, "es")
     private val fontSize = floatPreferencesKey("font_size_sp")
     private val commandHistory = stringPreferencesKey("command_history_json")
     private val terminalModeKey = booleanPreferencesKey("terminal_mode")
@@ -156,10 +157,10 @@ object TerminalPreferences {
                 emit(emptyPreferences())
             } else throw error
         }
-        .map { values -> values[languageKey]?.takeIf { it in languages } ?: "system" }
+        .map { values -> values[languageKey]?.takeIf { it in LANGUAGES } ?: LANGUAGE_SYSTEM }
 
     fun saveTerminalLanguage(context: Context, choice: String) {
-        if (choice in languages) languageWrites.trySend(context.applicationContext to choice)
+        if (choice in LANGUAGES) languageWrites.trySend(context.applicationContext to choice)
     }
 
     fun headerExpanded(context: Context): Flow<Boolean?> = context.applicationContext.terminalDataStore.data

@@ -3,7 +3,7 @@ import importlib
 import re
 import threading
 
-# yewtube defines its underline as "\x1b[2m\x1b[4m\x1b[%33m" (a malformed final sequence), so '%' is accepted.
+# yewtube defines underline as ESC[2m ESC[4m ESC[%33m (sic): accept the stray '%'.
 _ANSI = re.compile(r"\x1b\[[0-9;?%]*[A-Za-z]")
 _ERASE = re.compile(r"(?:\x1b\[[0-9]*K)+$")
 _SPLIT = re.compile(r"(\r\n|\r|\n)")
