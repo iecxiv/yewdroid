@@ -64,6 +64,13 @@ fun FormatsDialog(state: FormatsState, onPick: (FormatOption) -> Unit, onDismiss
         text = {
             Column {
                 Text(state.title, style = small, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (state.encoder.isNotEmpty() && !state.loading && state.error.isEmpty()) {
+                    Text(
+                        stringResource(R.string.dl_format_encoder, state.encoder),
+                        style = small.copy(color = ACCENT),
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
                 Spacer(Modifier.height(10.dp))
                 when {
                     state.loading -> Row(verticalAlignment = Alignment.CenterVertically) {
@@ -156,6 +163,7 @@ private fun DownloadRow(item: DownloadItem) {
         "video" -> stringResource(R.string.dl_stage_video)
         "audio" -> stringResource(R.string.dl_stage_audio)
         "merge" -> stringResource(R.string.dl_stage_merge)
+        "encode" -> stringResource(R.string.dl_stage_encode)
         "export" -> stringResource(R.string.dl_stage_export)
         "cancelling" -> stringResource(R.string.dl_stage_cancelling)
         else -> ""
@@ -178,12 +186,21 @@ private fun DownloadRow(item: DownloadItem) {
             Text("$kind \u00b7 ${item.label}", style = small)
             if (item.state == "running") {
                 Spacer(Modifier.height(4.dp))
-                LinearProgressIndicator(
-                    progress = { (item.percent / 100f).coerceIn(0f, 1f) },
-                    modifier = Modifier.fillMaxWidth(),
-                    color = ACCENT,
-                    trackColor = Color(0xFF2A2A2A)
-                )
+                if (item.stage == "encode") {
+                    // FFmpeg reports no progress here, so the bar just shows that it is working.
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = ACCENT,
+                        trackColor = Color(0xFF2A2A2A)
+                    )
+                } else {
+                    LinearProgressIndicator(
+                        progress = { (item.percent / 100f).coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = ACCENT,
+                        trackColor = Color(0xFF2A2A2A)
+                    )
+                }
             }
             Text(
                 status,
