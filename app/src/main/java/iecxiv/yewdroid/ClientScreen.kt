@@ -173,7 +173,7 @@ private fun ResultRow(item: ClientItem, playlist: Boolean) {
         listOf(item.author, if (item.count.isNotEmpty()) stringResource(R.string.client_playlist_count, item.count) else "")
     } else {
         listOf(item.author, item.views, item.date)
-    }.filter { it.isNotEmpty() }.joinToString(" · ")
+    }.filter { it.isNotEmpty() }.joinToString(" \u00b7 ")
     Row(
         Modifier.fillMaxWidth()
             .clickable { TerminalHub.runCommand(item.n.toString()) }
@@ -222,8 +222,9 @@ private fun ResultRow(item: ClientItem, playlist: Boolean) {
     }
 }
 
+/** YouTube thumbnail with an in-memory cache; also used by the player. */
 @Composable
-private fun Thumbnail(id: String, modifier: Modifier) {
+internal fun Thumbnail(id: String, modifier: Modifier) {
     val bitmap by produceState<ImageBitmap?>(thumbnails.get(id), id) {
         if (value == null && id.isNotEmpty()) {
             value = withContext(Dispatchers.IO) { fetchThumbnail(id) }?.also { thumbnails.put(id, it) }

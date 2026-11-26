@@ -35,6 +35,15 @@
     <string name="client_open_with">Abrir con…</string>
     <string name="client_more_from">Más de este canal</string>
     <string name="client_playlist_count">%1$s vídeos</string>
+    <string name="player_minimize">Minimizar reproductor</string>
+    <string name="player_queue">Cola</string>
+    <string name="player_play">Reproducir</string>
+    <string name="player_pause">Pausa</string>
+    <string name="player_previous">Anterior</string>
+    <string name="player_next">Siguiente</string>
+    <string name="player_stop">Detener</string>
+    <string name="player_back10">Retroceder 10 segundos</string>
+    <string name="player_forward10">Avanzar 10 segundos</string>
     <string name="pref_zoom_save_failed">[ajustes] No se pudo guardar el zoom.</string>
     <string name="pref_history_save_failed">[historial] No se pudo guardar el comando.</string>
     <string name="pref_history_read_failed">[historial] No se pudo leer el historial guardado.</string>

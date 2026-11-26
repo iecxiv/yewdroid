@@ -57,6 +57,8 @@ object TerminalHub {
     val lines: StateFlow<List<AnnotatedString>> = _lines
     private val _client = MutableStateFlow(ClientState())
     val client: StateFlow<ClientState> = _client
+    private val _queue = MutableStateFlow(QueueState())
+    val queue: StateFlow<QueueState> = _queue
     val playing = MutableStateFlow(false)
     val audioOn = MutableStateFlow(false)
     val nowPlaying = MutableStateFlow("")
@@ -227,6 +229,24 @@ object TerminalHub {
         scope.launch { runCatching { py?.callAttr("send", line) } }
     }
 
+    /** Reads the tracks of the current playback (called each time a track starts). */
+    private fun refreshQueue() {
+        scope.launch {
+            runCatching {
+                _queue.value = parseQueueState(
+                    Python.getInstance().getModule("yt_client").callAttr("queue").toString()
+                )
+            }
+        }
+    }
+
+    /** Skips to track [index] of the current playback queue. */
+    fun jumpTo(index: Int) {
+        scope.launch {
+            runCatching { Python.getInstance().getModule("yt_client").callAttr("jump", index) }
+        }
+    }
+
     fun onVideo(on: Boolean) { nextVideo = on }
 
     fun onPlay(url: String, title: String, artist: String, thumb: String) {
@@ -236,6 +256,7 @@ object TerminalHub {
         durationMs.value = 0L
         // yewtube stays inside playback until the track ends, so it is playing, not busy.
         _client.value = _client.value.copy(busy = false)
+        refreshQueue()
         main.post {
             val p = exo
             if (p == null) {
@@ -258,6 +279,7 @@ object TerminalHub {
         videoOn.value = false
         positionMs.value = 0L
         durationMs.value = 0L
+        _queue.value = QueueState()
         main.post { exo?.stop(); exo?.clearMediaItems() }
     }
 

@@ -52,3 +52,30 @@ def snapshot():
     return json.dumps({"mode": g.browse_mode, "page": int(g.current_page or 0),
                        "pages": math.ceil(total / size) if total else 0, "total": total,
                        "items": items, "message": message}, ensure_ascii=False)
+
+
+def queue():
+    """JSON with the tracks of the current playback and the position being played."""
+    from mps_youtube import g
+    player = getattr(g, "PLAYER_OBJ", None)
+    items = []
+    for video in list(getattr(player, "songlist", None) or []):
+        meta = g.meta.get(video.ytid, {})
+        items.append({"id": video.ytid, "title": _text(video.title), "length": int(video.length or 0),
+                      "author": _known(meta.get("uploaderName"))})
+    return json.dumps({"items": items, "index": int(getattr(player, "song_no", 0) or 0)},
+                      ensure_ascii=False)
+
+
+def jump(index):
+    """Skip to track `index` of the current playback (the player advances by one after this)."""
+    from mps_youtube import g
+    player = getattr(g, "PLAYER_OBJ", None)
+    if player is None or not getattr(player, "_active", False):
+        return False
+    index = int(index)
+    if not 0 <= index < len(player.songlist):
+        return False
+    player.song_no = index - 1
+    player.finish("next")
+    return True

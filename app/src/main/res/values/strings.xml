@@ -35,6 +35,15 @@
     <string name="client_open_with">Open with…</string>
     <string name="client_more_from">More from this channel</string>
     <string name="client_playlist_count">%1$s videos</string>
+    <string name="player_minimize">Minimize player</string>
+    <string name="player_queue">Queue</string>
+    <string name="player_play">Play</string>
+    <string name="player_pause">Pause</string>
+    <string name="player_previous">Previous</string>
+    <string name="player_next">Next</string>
+    <string name="player_stop">Stop</string>
+    <string name="player_back10">Back 10 seconds</string>
+    <string name="player_forward10">Forward 10 seconds</string>
     <string name="pref_zoom_save_failed">[settings] Could not save the zoom.</string>
     <string name="pref_history_save_failed">[history] Could not save the command.</string>
     <string name="pref_history_read_failed">[history] Could not read the saved history.</string>

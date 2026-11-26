@@ -26,6 +26,19 @@ data class ClientState(
     val ready: Boolean = false
 )
 
+/** One track of the playback queue. */
+data class QueueItem(
+    val id: String,
+    val title: String,
+    val lengthSec: Int = 0,
+    val author: String = ""
+)
+
+data class QueueState(
+    val items: List<QueueItem> = emptyList(),
+    val index: Int = 0
+)
+
 /** Parses the JSON produced by yt_client.snapshot(). */
 fun parseClientState(raw: String): ClientState {
     val json = JSONObject(raw)
@@ -53,4 +66,20 @@ fun parseClientState(raw: String): ClientState {
         busy = false,
         ready = true
     )
+}
+
+/** Parses the JSON produced by yt_client.queue(). */
+fun parseQueueState(raw: String): QueueState {
+    val json = JSONObject(raw)
+    val array = json.optJSONArray("items") ?: JSONArray()
+    val items = List(array.length()) { index ->
+        val item = array.getJSONObject(index)
+        QueueItem(
+            id = item.optString("id"),
+            title = item.optString("title"),
+            lengthSec = item.optInt("length"),
+            author = item.optString("author")
+        )
+    }
+    return QueueState(items = items, index = json.optInt("index"))
 }

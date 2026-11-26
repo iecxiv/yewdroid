@@ -165,10 +165,12 @@ fun TerminalScreen() {
     val translated by TerminalHub.translated.collectAsState()
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     var fullscreen by rememberSaveable { mutableStateOf(false) }
+    var playerOpen by rememberSaveable { mutableStateOf(false) }
     val showVideo = playing && videoOn
     val isFull = fullscreen && showVideo
     FullscreenEffect(isFull)
     BackHandler(enabled = isFull) { fullscreen = false }
+    LaunchedEffect(playing) { if (!playing) playerOpen = false }
     var input by rememberSaveable { mutableStateOf("") }
     val history = savedHistory.orEmpty()
     var hIdx by remember { mutableIntStateOf(-1) }
@@ -208,6 +210,7 @@ fun TerminalScreen() {
         }
         return
     }
+    BackHandler(enabled = playerOpen && playing && !terminalMode) { playerOpen = false }
 
     Column(Modifier.fillMaxSize().background(BG).systemBarsPadding().imePadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -330,10 +333,15 @@ fun TerminalScreen() {
                 }
             }
         } else {
-            ClientScreen(Modifier.weight(1f).fillMaxWidth())
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                ClientScreen(Modifier.fillMaxSize())
+                if (playing && playerOpen) {
+                    PlayerScreen(onClose = { playerOpen = false }, modifier = Modifier.fillMaxSize())
+                }
+            }
         }
 
-        if (playing) {
+        if (playing && terminalMode) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
                 Text(now, color = ACCENT, style = uiStyle, maxLines = 1)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -345,6 +353,8 @@ fun TerminalScreen() {
                     CtrlBtn(Icons.Filled.Stop) { TerminalHub.control("stop") }
                 }
             }
+        } else if (playing) {
+            if (!playerOpen) MiniPlayer(onOpen = { playerOpen = true })
         } else if (terminalMode) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("^C", color = FG, style = uiStyle, modifier = Modifier.padding(8.dp).clickableNoRipple { TerminalHub.interrupt() })
@@ -424,8 +434,9 @@ private fun formatTime(ms: Long): String {
     return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
 }
 
+/** Progress slider with elapsed and total time; also used by the native player. */
 @Composable
-private fun SeekBar(
+internal fun SeekBar(
     modifier: Modifier = Modifier,
     onInteract: () -> Unit = {},
     onDragChange: (Boolean) -> Unit = {}
