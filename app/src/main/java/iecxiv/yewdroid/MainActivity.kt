@@ -509,19 +509,22 @@ private fun FullscreenControls(onExit: () -> Unit, modifier: Modifier) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     CtrlBtn(Icons.Filled.FullscreenExit) { hit(onExit) }
                 }
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    CtrlBtn(Icons.Filled.SkipPrevious) { hit { TerminalHub.control("prev") } }
-                    CtrlBtn(Icons.Filled.Replay10) { hit { TerminalHub.control("seekb") } }
-                    CtrlBtn(if (audioOn) Icons.Filled.Pause else Icons.Filled.PlayArrow) { hit { TerminalHub.control("toggle") } }
-                    CtrlBtn(Icons.Filled.Forward10) { hit { TerminalHub.control("seekf") } }
-                    CtrlBtn(Icons.Filled.SkipNext) { hit { TerminalHub.control("next") } }
-                    CtrlBtn(Icons.Filled.Stop) { hit { TerminalHub.control("stop") } }
+                // The buttons sit right above the time bar, at the bottom of the screen.
+                Column(Modifier.fillMaxWidth()) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CtrlBtn(Icons.Filled.SkipPrevious) { hit { TerminalHub.control("prev") } }
+                        CtrlBtn(Icons.Filled.Replay10) { hit { TerminalHub.control("seekb") } }
+                        CtrlBtn(if (audioOn) Icons.Filled.Pause else Icons.Filled.PlayArrow) { hit { TerminalHub.control("toggle") } }
+                        CtrlBtn(Icons.Filled.Forward10) { hit { TerminalHub.control("seekf") } }
+                        CtrlBtn(Icons.Filled.SkipNext) { hit { TerminalHub.control("next") } }
+                        CtrlBtn(Icons.Filled.Stop) { hit { TerminalHub.control("stop") } }
+                    }
+                    SeekBar(onInteract = { tick++ }, onDragChange = { dragging = it })
                 }
-                SeekBar(onInteract = { tick++ }, onDragChange = { dragging = it })
             }
         }
     }
