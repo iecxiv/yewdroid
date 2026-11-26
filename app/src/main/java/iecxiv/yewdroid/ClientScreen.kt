@@ -159,6 +159,17 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     val downloads by DownloadHub.downloads.collectAsState()
     val formats by DownloadHub.formats.collectAsState()
     val activeDownloads = downloads.items.count { it.active }
+    // Commands typed in the terminal change the list yewtube holds without the client knowing: if any were
+    // typed, what the client remembered about that list is dropped before the screen state is built.
+    val terminalTouched = remember {
+        val touched = TerminalHub.takeTerminalTouched()
+        if (touched) {
+            ClientMemory.resultsFrom = Section.SEARCH
+            ClientMemory.searchKept = false
+            ClientMemory.openedPlaylist = null
+        }
+        touched
+    }
     var query by rememberSaveable { mutableStateOf(ClientMemory.query) }
     // The tab chosen in Settings (search, playlists or history) is the one shown when the client opens;
     // coming back from the terminal it is the tab that was open.
@@ -184,6 +195,7 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     // The old list stays hidden until the session has taken this many snapshots (the new list is then in):
     // comparing the lists is not enough, as the new one may be identical to the old one.
     var waitSeq by remember { mutableStateOf<Int?>(null) }
+    var touchedHandled by remember { mutableStateOf(false) }
     var focused by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     var adding by remember { mutableStateOf<Int?>(null) }
@@ -207,11 +219,9 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     val shownItems = if (hideResults) emptyList() else state.items
     val shownMessage = if (hideResults) "" else state.message
     val shownPages = if (hideResults) 0 else state.pages
-    // While the native client is shown, playback runs in the background so commands keep working.
+    // Playback runs in its own thread in every view, so nothing has to be switched here.
     DisposableEffect(Unit) {
-        TerminalHub.setBackgroundPlayback(true)
         onDispose {
-            TerminalHub.setBackgroundPlayback(false)
             // The list yewtube holds outlives this screen; the tab and typed text only if the app is not closing.
             ClientMemory.resultsFrom = resultsFrom
             ClientMemory.lastQuery = lastQuery
@@ -270,6 +280,17 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     LaunchedEffect(state.ready) {
         if (state.ready && !startupDone) {
             startupDone = true
+            if (section == Section.HISTORY && resultsFrom != Section.HISTORY) {
+                replaceResults(Section.HISTORY, "history")
+            }
+        }
+    }
+
+    // Back from the terminal on the History tab: the list yewtube holds may be a terminal search, so the
+    // history is loaded again (the terminal's list is kept aside as the Search results).
+    LaunchedEffect(state.ready) {
+        if (state.ready && terminalTouched && !touchedHandled) {
+            touchedHandled = true
             if (section == Section.HISTORY && resultsFrom != Section.HISTORY) {
                 replaceResults(Section.HISTORY, "history")
             }

@@ -167,6 +167,10 @@ fun TerminalScreen() {
     val now by TerminalHub.nowPlaying.collectAsState()
     val videoOn by TerminalHub.videoOn.collectAsState()
     val videoAspect by TerminalHub.videoAspect.collectAsState()
+    val position by TerminalHub.positionMs.collectAsState()
+    val duration by TerminalHub.durationMs.collectAsState()
+    val shuffle by TerminalHub.shuffle.collectAsState()
+    val repeat by TerminalHub.repeat.collectAsState()
     val translationAvailable by TerminalHub.translationAvailable.collectAsState()
     val translated by TerminalHub.translated.collectAsState()
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -359,14 +363,38 @@ fun TerminalScreen() {
             }
         }
 
-        if (playing && terminalMode) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-                Text(now, color = ACCENT, style = uiStyle, maxLines = 1)
-                PlaybackControls(audioOn, Modifier.fillMaxWidth())
+        if (terminalMode) {
+            // Playback never blocks the session, so the prompt stays available while something plays.
+            if (playing) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            now, color = ACCENT, style = uiStyle, maxLines = 1,
+                            overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            formatTime(position) + " / " + formatTime(duration),
+                            color = FG, style = uiStyle.copy(fontSize = 11.sp), maxLines = 1
+                        )
+                        CtrlBtn(
+                            Icons.Filled.Shuffle, if (shuffle) ACCENT else FG,
+                            stringResource(R.string.player_shuffle)
+                        ) { TerminalHub.toggleShuffle() }
+                        CtrlBtn(
+                            if (repeat == 2) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
+                            if (repeat == 0) FG else ACCENT,
+                            stringResource(
+                                when (repeat) {
+                                    1 -> R.string.player_repeat_all
+                                    2 -> R.string.player_repeat_one
+                                    else -> R.string.player_repeat_off
+                                }
+                            )
+                        ) { TerminalHub.cycleRepeat() }
+                    }
+                    PlaybackControls(audioOn, Modifier.fillMaxWidth())
+                }
             }
-        } else if (playing) {
-            if (!playerOpen) MiniPlayer(onOpen = { playerOpen = true })
-        } else if (terminalMode) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("^C", color = FG, style = uiStyle, modifier = Modifier.padding(8.dp).clickableNoRipple { TerminalHub.interrupt() })
                 BasicTextField(
@@ -403,6 +431,8 @@ fun TerminalScreen() {
                 }
                 CtrlBtn(Icons.AutoMirrored.Filled.Send) { submit() }
             }
+        } else if (playing) {
+            if (!playerOpen) MiniPlayer(onOpen = { playerOpen = true })
         }
     }
 }
