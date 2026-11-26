@@ -201,11 +201,11 @@ def translate(text):
 
 
 def translate_message(text):
-    """Translate a message for the native client, whatever the terminal toggle says."""
+    """Translate regardless of the terminal toggle (used by the native client)."""
     if not (_state["plain"] or _state["patterns"]):
         return text
     try:
-        return "\n".join(_translate_line(line) for line in str(text).split("\n"))
+        return "\n".join(_translate_line(line) for line in text.split("\n"))
     except Exception:
         return text
 

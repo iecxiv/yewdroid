@@ -3,16 +3,16 @@ package iecxiv.yewdroid
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** One row of the native client: a video (mode "normal") or a YouTube playlist (mode "ytpl"). */
+/** One result row: a video (mode "normal") or a YouTube playlist (mode "ytpl"). */
 data class ClientItem(
     val n: Int,
     val id: String,
     val title: String,
-    val lengthSec: Int,
-    val author: String,
-    val views: String,
-    val date: String,
-    val count: String
+    val lengthSec: Int = 0,
+    val author: String = "",
+    val views: String = "",
+    val date: String = "",
+    val count: String = ""
 )
 
 data class ClientState(
@@ -26,7 +26,7 @@ data class ClientState(
     val ready: Boolean = false
 )
 
-/** Reads the JSON produced by yt_client.snapshot(). */
+/** Parses the JSON produced by yt_client.snapshot(). */
 fun parseClientState(raw: String): ClientState {
     val json = JSONObject(raw)
     val array = json.optJSONArray("items") ?: JSONArray()

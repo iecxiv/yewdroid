@@ -32,7 +32,7 @@ def install(term):
     screen_installed = [False]
 
     def idle():
-        """Tell the sink yewtube is waiting for a command (the native client refreshes then)."""
+        """Tell the sink that yewtube is waiting for a command (the native client refreshes then)."""
         notify = getattr(term._sink, "idle", None)
         if notify is None:
             return
@@ -211,7 +211,7 @@ def install(term):
                         redraw[0]()
                     except Exception:
                         traceback.print_exc(file=term._orig_err)
-                    idle()
+                idle()
                 continue
             if item is term._INTR:
                 raise KeyboardInterrupt

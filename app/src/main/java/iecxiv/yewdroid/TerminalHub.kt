@@ -35,6 +35,7 @@ interface TermSink {
     fun video(on: Boolean)
     fun mode(playing: Boolean)
     fun stopPlayback()
+    /** yewtube is waiting for a command (the native client refreshes its results). */
     fun idle()
 }
 
@@ -55,7 +56,6 @@ object TerminalHub {
     private val _lines = MutableStateFlow<List<AnnotatedString>>(emptyList())
     val lines: StateFlow<List<AnnotatedString>> = _lines
     private val _client = MutableStateFlow(ClientState())
-    /** Results shown by the native client, refreshed whenever yewtube is waiting for a command. */
     val client: StateFlow<ClientState> = _client
     val playing = MutableStateFlow(false)
     val audioOn = MutableStateFlow(false)
@@ -184,22 +184,6 @@ object TerminalHub {
         }
     }
 
-    /** Called from Python whenever yewtube starts waiting for a command. */
-    fun onIdle() {
-        scope.launch {
-            val next = runCatching {
-                parseClientState(Python.getInstance().getModule("yt_client").callAttr("snapshot").toString())
-            }.getOrNull()
-            _client.value = next ?: _client.value.copy(busy = false, ready = true)
-        }
-    }
-
-    /** Sends a yewtube command on behalf of the native client (nothing is echoed to the terminal). */
-    fun runCommand(line: String) {
-        _client.value = _client.value.copy(busy = true)
-        scope.launch { runCatching { py?.callAttr("send", line) } }
-    }
-
     private suspend fun tick() {
         while (true) {
             delay(1000)
@@ -223,6 +207,24 @@ object TerminalHub {
                 _lines.value = buffer.snapshot()
             }
         }
+    }
+
+    /** Called when yewtube waits for a command: refresh the native client's results. */
+    fun onIdle() {
+        scope.launch {
+            _client.value = runCatching {
+                parseClientState(
+                    Python.getInstance().getModule("yt_client").callAttr("snapshot").toString()
+                )
+            }.getOrElse { _client.value.copy(busy = false, ready = true) }
+        }
+    }
+
+    /** Sends a yewtube command from the native client without echoing it in the terminal. */
+    fun runCommand(line: String) {
+        if (py == null) return
+        _client.value = _client.value.copy(busy = true)
+        scope.launch { runCatching { py?.callAttr("send", line) } }
     }
 
     fun onVideo(on: Boolean) { nextVideo = on }
