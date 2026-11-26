@@ -8,7 +8,17 @@ plugins {
 val enableFfmpeg = providers.gradleProperty("enableFfmpeg").map { it.toBooleanStrict() }.getOrElse(false)
 val ffmpegSource = providers.gradleProperty("ffmpegSource").orElse(providers.environmentVariable("FFMPEG_SOURCE"))
 val lameSource = providers.gradleProperty("lameSource").orElse(providers.environmentVariable("LAME_SOURCE"))
+val oggSource = providers.gradleProperty("oggSource").orElse(providers.environmentVariable("OGG_SOURCE"))
+val vorbisSource = providers.gradleProperty("vorbisSource").orElse(providers.environmentVariable("VORBIS_SOURCE"))
 val ffmpegNdk = providers.gradleProperty("ffmpegNdk").orElse(providers.environmentVariable("ANDROID_NDK_HOME"))
+
+// FFmpeg binaries built by tools/build-ffmpeg-android.sh; once they exist they are packaged by every build.
+val ffmpegAbis = listOf("arm64-v8a", "x86_64")
+val ffmpegLibsDir = layout.buildDirectory.dir("generated/ffmpeg/jniLibs")
+fun ffmpegBuilt(): Boolean = ffmpegAbis.all { abi ->
+    listOf("libffmpeg.so", "libffprobe.so").all { ffmpegLibsDir.get().asFile.resolve("$abi/$it").isFile }
+}
+val packageFfmpeg = enableFfmpeg || ffmpegBuilt()
 
 android {
     namespace = "iecxiv.yewdroid"
@@ -30,7 +40,7 @@ android {
     sourceSets.getByName("main") {
         jniLibs.srcDir(layout.buildDirectory.dir("generated/quickjs/jniLibs"))
         assets.srcDir(layout.buildDirectory.dir("generated/quickjs/assets"))
-        if (enableFfmpeg) {
+        if (packageFfmpeg) {
             jniLibs.srcDir(layout.buildDirectory.dir("generated/ffmpeg/jniLibs"))
             assets.srcDir(layout.buildDirectory.dir("generated/ffmpeg/assets"))
         }
@@ -39,7 +49,7 @@ android {
         jniLibs {
             useLegacyPackaging = true
             keepDebugSymbols += "**/libqjs.so"
-            if (enableFfmpeg) {
+            if (packageFfmpeg) {
                 keepDebugSymbols += listOf("**/libffmpeg.so", "**/libffprobe.so")
             }
         }
@@ -61,24 +71,33 @@ tasks.named("preBuild") { dependsOn(buildQuickJs) }
 if (enableFfmpeg) {
     val buildFfmpeg by tasks.registering(Exec::class) {
         group = "build"
-        description = "Build Android FFmpeg and ffprobe with LAME from supplied sources"
+        description = "Build Android FFmpeg and ffprobe with LAME, libogg and libvorbis from supplied sources"
         workingDir(rootProject.projectDir)
         commandLine("bash", rootProject.file("tools/build-ffmpeg-android.sh").absolutePath)
+        // Already built: delete app/build/generated/ffmpeg to force a rebuild.
+        onlyIf { !ffmpegBuilt() }
         doFirst {
             val ffmpeg = ffmpegSource.orNull ?: throw GradleException("Define -PffmpegSource or FFMPEG_SOURCE")
             val lame = lameSource.orNull ?: throw GradleException("Define -PlameSource or LAME_SOURCE")
+            val ogg = oggSource.orNull ?: throw GradleException("Define -PoggSource or OGG_SOURCE")
+            val vorbis = vorbisSource.orNull ?: throw GradleException("Define -PvorbisSource or VORBIS_SOURCE")
             val ndk = ffmpegNdk.orNull ?: throw GradleException("Define -PffmpegNdk or ANDROID_NDK_HOME")
             val ffmpegDir = rootProject.file(ffmpeg)
             val lameDir = rootProject.file(lame)
+            val oggDir = rootProject.file(ogg)
+            val vorbisDir = rootProject.file(vorbis)
             val ndkDir = rootProject.file(ndk)
-            if (!ffmpegDir.resolve("configure").isFile || !lameDir.resolve("configure").isFile) {
-                throw GradleException("FFmpeg and LAME require source trees extracted with configure")
+            val sources = listOf(ffmpegDir, lameDir, oggDir, vorbisDir)
+            if (sources.any { !it.resolve("configure").isFile }) {
+                throw GradleException("FFmpeg, LAME, libogg and libvorbis require source trees extracted with configure")
             }
             if (!ndkDir.resolve("toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar").isFile) {
                 throw GradleException("Invalid Linux NDK for the FFmpeg script")
             }
             environment("FFMPEG_SOURCE", ffmpegDir.absolutePath)
             environment("LAME_SOURCE", lameDir.absolutePath)
+            environment("OGG_SOURCE", oggDir.absolutePath)
+            environment("VORBIS_SOURCE", vorbisDir.absolutePath)
             environment("ANDROID_NDK_HOME", ndkDir.absolutePath)
         }
     }
