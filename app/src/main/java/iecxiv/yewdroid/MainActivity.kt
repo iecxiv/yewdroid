@@ -45,8 +45,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -248,25 +246,17 @@ fun TerminalScreen() {
                             TerminalHub.setTranslated(ctx, !translated)
                         }
                     }
+                    // The label names the view you will go to: "Terminal" from the UI, "UI" from the terminal.
                     Text(
-                        stringResource(R.string.main_terminal), color = FG,
-                        style = uiStyle.copy(fontSize = 12.sp), maxLines = 1,
-                        modifier = Modifier.padding(end = 6.dp)
-                    )
-                    Switch(
-                        checked = terminalMode,
-                        onCheckedChange = {
-                            selectedMode = it
-                            TerminalPreferences.saveTerminalMode(ctx, it)
-                        },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = BG,
-                            checkedTrackColor = ACCENT,
-                            checkedBorderColor = ACCENT,
-                            uncheckedThumbColor = FG,
-                            uncheckedTrackColor = Color(0xFF2A2A2A),
-                            uncheckedBorderColor = Color(0xFF555555)
-                        )
+                        stringResource(if (terminalMode) R.string.main_ui else R.string.main_terminal),
+                        color = ACCENT, style = uiStyle, maxLines = 1,
+                        modifier = Modifier
+                            .clickableNoRipple {
+                                val value = !terminalMode
+                                selectedMode = value
+                                TerminalPreferences.saveTerminalMode(ctx, value)
+                            }
+                            .padding(horizontal = 12.dp, vertical = 12.dp)
                     )
                     CtrlBtn(Icons.Filled.Settings, description = stringResource(R.string.settings_title)) {
                         ctx.startActivity(Intent(ctx, SettingsActivity::class.java))
@@ -316,6 +306,8 @@ fun TerminalScreen() {
                     )
                 }
             }
+            // In the UI the controls sit between the video and the tabs (the terminal has its own below).
+            if (!terminalMode) PlaybackControls(audioOn, Modifier.fillMaxWidth().padding(horizontal = 8.dp))
         }
 
         if (terminalMode) {
@@ -352,14 +344,7 @@ fun TerminalScreen() {
         if (playing && terminalMode) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
                 Text(now, color = ACCENT, style = uiStyle, maxLines = 1)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    CtrlBtn(Icons.Filled.SkipPrevious) { TerminalHub.control("prev") }
-                    CtrlBtn(Icons.Filled.Replay10) { TerminalHub.control("seekb") }
-                    CtrlBtn(if (audioOn) Icons.Filled.Pause else Icons.Filled.PlayArrow) { TerminalHub.control("toggle") }
-                    CtrlBtn(Icons.Filled.Forward10) { TerminalHub.control("seekf") }
-                    CtrlBtn(Icons.Filled.SkipNext) { TerminalHub.control("next") }
-                    CtrlBtn(Icons.Filled.Stop) { TerminalHub.control("stop") }
-                }
+                PlaybackControls(audioOn, Modifier.fillMaxWidth())
             }
         } else if (playing) {
             if (!playerOpen) MiniPlayer(onOpen = { playerOpen = true })
@@ -401,6 +386,19 @@ fun TerminalScreen() {
                 CtrlBtn(Icons.AutoMirrored.Filled.Send) { submit() }
             }
         }
+    }
+}
+
+/** Previous, back 10 s, play/pause, forward 10 s, next and stop. */
+@Composable
+private fun PlaybackControls(audioOn: Boolean, modifier: Modifier = Modifier) {
+    Row(modifier, horizontalArrangement = Arrangement.SpaceEvenly) {
+        CtrlBtn(Icons.Filled.SkipPrevious) { TerminalHub.control("prev") }
+        CtrlBtn(Icons.Filled.Replay10) { TerminalHub.control("seekb") }
+        CtrlBtn(if (audioOn) Icons.Filled.Pause else Icons.Filled.PlayArrow) { TerminalHub.control("toggle") }
+        CtrlBtn(Icons.Filled.Forward10) { TerminalHub.control("seekf") }
+        CtrlBtn(Icons.Filled.SkipNext) { TerminalHub.control("next") }
+        CtrlBtn(Icons.Filled.Stop) { TerminalHub.control("stop") }
     }
 }
 
