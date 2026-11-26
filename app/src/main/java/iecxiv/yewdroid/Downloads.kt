@@ -147,6 +147,7 @@ internal fun FormatDialog(item: ClientItem, kind: String, onQueued: () -> Unit, 
     var selected by remember { mutableStateOf<String?>(null) }
     val current = selected ?: options.firstOrNull()?.key
     val noOptions = loaded != null && options.isEmpty()
+    val failure = loaded?.error.orEmpty()
     val small = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = MUTED)
     val row = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp, color = FG)
     AlertDialog(
@@ -168,7 +169,11 @@ internal fun FormatDialog(item: ClientItem, kind: String, onQueued: () -> Unit, 
                         Spacer(Modifier.height(6.dp))
                         Text(stringResource(R.string.download_loading), style = small)
                     }
-                    noOptions -> Text(stringResource(R.string.download_formats_failed), style = row)
+                    noOptions -> Text(
+                        if (failure.isEmpty()) stringResource(R.string.download_formats_empty)
+                        else stringResource(R.string.download_formats_failed, failure),
+                        style = row
+                    )
                     else -> Column(Modifier.heightIn(max = 280.dp).verticalScroll(rememberScrollState())) {
                         options.forEach { option ->
                             Row(
@@ -201,7 +206,7 @@ internal fun FormatDialog(item: ClientItem, kind: String, onQueued: () -> Unit, 
         },
         dismissButton = {
             TextButton(onClick = onDismiss, colors = ButtonDefaults.textButtonColors(contentColor = MUTED)) {
-                Text(stringResource(R.string.download_cancel))
+                Text(stringResource(R.string.dialog_cancel))
             }
         }
     )
@@ -252,7 +257,7 @@ private fun DownloadRow(item: DownloadItem) {
         else -> ""
     }
     val status = when (item.status) {
-        "queued" -> stringResource(R.string.download_queued)
+        "queued" -> stringResource(R.string.download_state_queued)
         "running" -> if (item.percent in 0..100 && (item.stage == "audio" || item.stage == "video")) {
             "$stageText ${item.percent}%"
         } else stageText
@@ -272,7 +277,7 @@ private fun DownloadRow(item: DownloadItem) {
                 TextButton(
                     onClick = { DownloadHub.cancel(item.id) },
                     colors = ButtonDefaults.textButtonColors(contentColor = ACCENT)
-                ) { Text(stringResource(R.string.download_cancel), fontSize = 12.sp) }
+                ) { Text(stringResource(R.string.dialog_cancel), fontSize = 12.sp) }
             }
         }
         if (running) {

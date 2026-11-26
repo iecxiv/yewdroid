@@ -1,20 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="client_tab_downloads">Downloads</string>
     <string name="download_choose_audio">Choose audio quality</string>
     <string name="download_choose_video">Choose video quality</string>
     <string name="download_loading">Loading formats…</string>
-    <string name="download_formats_failed">The formats of this video could not be read. You can still download the best available one.</string>
-    <string name="download_start">Download</string>
     <string name="download_best">Best available</string>
-    <string name="download_cancel">Cancel</string>
-    <string name="downloads_empty">No downloads yet.\nUse the ⋮ menu of a result to download.</string>
-    <string name="downloads_clear">Clear finished</string>
     <string name="download_kind_audio">Audio</string>
     <string name="download_kind_video">Video</string>
-    <string name="download_queued">Queued</string>
-    <string name="download_stage_audio">Downloading audio</string>
-    <string name="download_stage_video">Downloading video</string>
     <string name="download_stage_merging">Merging audio and video</string>
     <string name="download_stage_exporting">Exporting to Downloads</string>
     <string name="download_done">Saved: %1$s</string>
