@@ -170,12 +170,30 @@ fun TerminalScreen() {
     val translationAvailable by TerminalHub.translationAvailable.collectAsState()
     val translated by TerminalHub.translated.collectAsState()
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
-    var fullscreen by rememberSaveable { mutableStateOf(false) }
+    // Fullscreen follows the rotation: landscape with a video shows it fullscreen, portrait shows it inline.
+    // [manualFull] is the fullscreen button used in portrait (it forces landscape until the user exits);
+    // [dismissed] is the exit button used while the phone is already held in landscape.
+    var manualFull by rememberSaveable { mutableStateOf(false) }
+    var dismissed by rememberSaveable { mutableStateOf(false) }
     var playerOpen by rememberSaveable { mutableStateOf(false) }
     val showVideo = playing && videoOn
-    val isFull = fullscreen && showVideo
-    FullscreenEffect(isFull)
-    BackHandler(enabled = isFull) { fullscreen = false }
+    val isFull = showVideo && (manualFull || (landscape && !dismissed))
+    FullscreenEffect(isFull, manualFull)
+    LaunchedEffect(landscape) { if (!landscape) dismissed = false }
+    LaunchedEffect(showVideo) {
+        if (!showVideo) {
+            manualFull = false
+            dismissed = false
+        }
+    }
+    fun enterFullscreen() {
+        if (landscape) dismissed = false else manualFull = true
+    }
+    fun exitFullscreen() {
+        manualFull = false
+        if (landscape) dismissed = true
+    }
+    BackHandler(enabled = isFull) { exitFullscreen() }
     LaunchedEffect(playing) { if (!playing) playerOpen = false }
     var input by rememberSaveable { mutableStateOf("") }
     val history = savedHistory.orEmpty()
@@ -212,7 +230,7 @@ fun TerminalScreen() {
     if (isFull) {
         Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
             VideoSurface(Modifier.aspectRatio(videoAspect.coerceAtLeast(0.2f)))
-            FullscreenControls({ fullscreen = false }, Modifier.fillMaxSize())
+            FullscreenControls({ exitFullscreen() }, Modifier.fillMaxSize())
         }
         return
     }
@@ -297,7 +315,7 @@ fun TerminalScreen() {
                 )
                 if (overlay) {
                     Box(Modifier.align(Alignment.TopEnd).background(Color(0x66000000))) {
-                        CtrlBtn(Icons.Filled.Fullscreen) { fullscreen = true }
+                        CtrlBtn(Icons.Filled.Fullscreen) { enterFullscreen() }
                     }
                     SeekBar(
                         Modifier.align(Alignment.BottomCenter).background(Color(0x66000000)),
@@ -411,20 +429,25 @@ private fun Context.findActivity(): Activity? {
     return null
 }
 
+/**
+ * Hides the system bars while the video is fullscreen. [forceLandscape] (the fullscreen button used in
+ * portrait) also locks the screen to landscape until the user exits; a fullscreen entered by rotating
+ * the phone leaves the orientation to the sensor so rotating back to portrait leaves it.
+ */
 @Composable
-private fun FullscreenEffect(on: Boolean) {
+private fun FullscreenEffect(on: Boolean, forceLandscape: Boolean) {
     val ctx = LocalContext.current
-    DisposableEffect(on) {
+    DisposableEffect(on, forceLandscape) {
         val activity = ctx.findActivity()
         if (activity != null && on) {
-            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            if (forceLandscape) activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
             val controller = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             controller.hide(WindowInsetsCompat.Type.systemBars())
         }
         onDispose {
             if (activity != null && on) {
-                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                if (forceLandscape) activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                 WindowCompat.getInsetsController(activity.window, activity.window.decorView)
                     .show(WindowInsetsCompat.Type.systemBars())
             }
