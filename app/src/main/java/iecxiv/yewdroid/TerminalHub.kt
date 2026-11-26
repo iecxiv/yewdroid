@@ -114,6 +114,7 @@ object TerminalHub {
         }
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             audioOn.value = isPlaying
+            updateKeepScreenOn()
             // The first time a track really sounds it is recorded in the history (not when it is only queued).
             if (isPlaying && playing.value && !startReported) {
                 startReported = true
@@ -158,11 +159,20 @@ object TerminalHub {
     }
 
     /**
+     * Keeps the screen from turning off while a video is showing and playing. It may turn off when the video
+     * is paused or the track is audio only. Runs on the main thread, where the views live.
+     */
+    private fun updateKeepScreenOn() {
+        surface?.keepScreenOn = audioOn.value && videoOn.value && playing.value
+    }
+
+    /**
      * Moving the video to another view (mini player, expanded player, fullscreen) gives the player a new
      * surface. If the track then starts over, it is put back where it was a moment before.
      */
     fun attachSurface(view: SurfaceView) {
         surface = view
+        updateKeepScreenOn()
         val p = exo ?: return
         val position = p.currentPosition
         val title = nowPlaying.value
@@ -171,6 +181,7 @@ object TerminalHub {
     }
 
     fun detachSurface(view: SurfaceView) {
+        view.keepScreenOn = false
         if (surface === view) surface = null
         exo?.clearVideoSurfaceView(view)
     }
@@ -424,6 +435,7 @@ object TerminalHub {
                 p.prepare()
                 p.play()
             }
+            updateKeepScreenOn()
         }
     }
 
@@ -437,7 +449,11 @@ object TerminalHub {
         positionMs.value = 0L
         durationMs.value = 0L
         _queue.value = QueueState()
-        main.post { exo?.stop(); exo?.clearMediaItems() }
+        main.post {
+            exo?.stop()
+            exo?.clearMediaItems()
+            updateKeepScreenOn()
+        }
     }
 
     private fun event(action: String) {
