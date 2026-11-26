@@ -4,7 +4,7 @@ import shutil
 import sys
 import tempfile
 
-from android_dl_common import Cancelled, say
+from android_dl_common import Cancelled, extractor_options, say
 
 
 def _publish(path):
@@ -51,6 +51,7 @@ def download_video(ytid, folder, hook, format_id=None, tracker=None):
                 "postprocessors": [],
                 "match_filter": lambda info, *, incomplete=False: (
                     "Live streams are not supported" if info.get("is_live") else None),
+                **extractor_options(),
             }
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=True)

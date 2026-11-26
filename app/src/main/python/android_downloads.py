@@ -7,7 +7,8 @@ import threading
 import time
 import traceback
 
-from android_dl_common import QUIET, Cancelled, Progress
+from android_dl_common import (CLIENTS, FALLBACK_CLIENTS, QUIET, Cancelled, Progress, is_bot_check,
+                               plain)
 
 _lock = threading.RLock()
 _jobs = []
@@ -34,7 +35,7 @@ class _Silent:
 
 
 def _clean(message):
-    return re.sub(r"https?://\S+", "<URL>", str(message))
+    return re.sub(r"https?://\S+", "<URL>", plain(message))
 
 
 def _log():
@@ -53,14 +54,32 @@ def _size(fmt):
         return 0
 
 
+def _extract(ytid):
+    """Format info for a video; retries with other YouTube clients on the sign-in check."""
+    import yt_dlp
+    order = [CLIENTS[0]] + [c for c in (None,) + FALLBACK_CLIENTS if c != CLIENTS[0]]
+    last = None
+    for client in order:
+        options = {"quiet": True, "no_warnings": True, "noplaylist": True, "logger": _Silent()}
+        if client:
+            options["extractor_args"] = {"youtube": {"player_client": list(client)}}
+        try:
+            with yt_dlp.YoutubeDL(options) as ydl:
+                info = ydl.extract_info("https://www.youtube.com/watch?v=%s" % ytid, download=False)
+            CLIENTS[0] = client
+            return info
+        except Exception as error:
+            last = error
+            if not is_bot_check(error):
+                raise
+    raise last
+
+
 def formats(ytid):
     """JSON with the audio and video options yt-dlp offers for a video."""
-    import yt_dlp
     result = {"audio": [], "video": [], "error": ""}
     try:
-        options = {"quiet": True, "no_warnings": True, "noplaylist": True, "logger": _Silent()}
-        with yt_dlp.YoutubeDL(options) as ydl:
-            info = ydl.extract_info("https://www.youtube.com/watch?v=%s" % ytid, download=False)
+        info = _extract(ytid)
         usable = [f for f in ((info or {}).get("formats") or []) if f.get("url") and not f.get("has_drm")]
         audio = [f for f in usable if f.get("vcodec") == "none" and f.get("acodec") not in (None, "none")]
         m4a = [f for f in audio if f.get("ext") == "m4a"]

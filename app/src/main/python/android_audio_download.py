@@ -7,11 +7,11 @@ import re
 import shutil
 import tempfile
 
-from android_dl_common import Cancelled, say
+from android_dl_common import Cancelled, extractor_options, plain, say
 
 
 def _clean(message):
-    return re.sub(r"https?://\S+", "<URL>", str(message))
+    return re.sub(r"https?://\S+", "<URL>", plain(message))
 
 
 def download_audio(ytid, folder, publish, format_id=None, tracker=None):
@@ -86,6 +86,7 @@ def download_audio(ytid, folder, publish, format_id=None, tracker=None):
         "socket_timeout": 25,
         "match_filter": lambda info, *, incomplete=False: (
             "Live streams are not supported" if info.get("is_live") else None),
+        **extractor_options(),
     }
     try:
         with yt_dlp.YoutubeDL(options) as ydl:

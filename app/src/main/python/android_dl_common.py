@@ -1,11 +1,35 @@
-"""Shared helpers for client downloads: quiet logging, cancellation and stage progress."""
+"""Shared helpers for client downloads: quiet logging, cancellation, stage progress and YouTube clients."""
+import re
 import threading
 
 QUIET = threading.local()
 
+# YouTube restricts each internal client at different times. When the default client is asked to
+# sign in, formats() retries with these; the one that worked is remembered for the downloads.
+FALLBACK_CLIENTS = (("tv",), ("web_safari",), ("mweb",))
+CLIENTS = [None]
+
+_ANSI = re.compile(r"\x1b?\[[0-9;]*m")
+
 
 class Cancelled(Exception):
     """Raised inside a download when the user cancels it."""
+
+
+def plain(text):
+    """Text without terminal colour codes (yt-dlp colours its errors)."""
+    return _ANSI.sub("", str(text))
+
+
+def is_bot_check(error):
+    text = plain(error).lower()
+    return "confirm you" in text and "bot" in text
+
+
+def extractor_options():
+    """yt-dlp options that select the YouTube client that last worked."""
+    client = CLIENTS[0]
+    return {"extractor_args": {"youtube": {"player_client": list(client)}}} if client else {}
 
 
 def say(*args, **kwargs):
