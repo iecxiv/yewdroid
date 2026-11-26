@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="orderui_label">Ordenar por</string>
+    <string name="orderui_relevance">Relevancia</string>
+    <string name="orderui_date">Fecha</string>
+    <string name="orderui_views">Vistas</string>
+    <string name="orderui_title">Título</string>
+</resources>

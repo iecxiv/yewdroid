@@ -53,7 +53,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.chaquo.python.Python
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -99,10 +101,30 @@ private fun pythonKeepsSearch(): Boolean = runCatching {
     Python.getInstance().getModule("android_views").callAttr("has_stash").toBoolean()
 }.getOrDefault(false)
 
+/** The yewtube "order" option (the same one as in Settings), or null when it cannot be read. */
+private fun loadOrder(): ConfigOption? = parseConfigState(
+    Python.getInstance().getModule("android_settings").callAttr("snapshot").toString()
+).options.firstOrNull { it.key == "ORDER" }
+
+private fun saveOrder(value: String): Boolean = JSONObject(
+    Python.getInstance().getModule("android_settings").callAttr("set_value", "ORDER", value).toString()
+).optBoolean("ok")
+
+@Composable
+private fun orderName(value: String): String = stringResource(
+    when (value) {
+        "date" -> R.string.orderui_date
+        "views" -> R.string.orderui_views
+        "title" -> R.string.orderui_title
+        else -> R.string.orderui_relevance
+    }
+)
+
 @Composable
 fun ClientScreen(modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
     val focus = LocalFocusManager.current
+    val scope = rememberCoroutineScope()
     val state by TerminalHub.client.collectAsState()
     val downloads by DownloadHub.downloads.collectAsState()
     val formats by DownloadHub.formats.collectAsState()
@@ -123,6 +145,8 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     var saving by remember { mutableStateOf(false) }
     var adding by remember { mutableStateOf<Int?>(null) }
     var clearingHistory by remember { mutableStateOf(false) }
+    var order by remember { mutableStateOf<ConfigOption?>(null) }
+    var orderMenu by remember { mutableStateOf(false) }
     val autoQueueFlow = remember(ctx.applicationContext) { TerminalPreferences.clientAutoQueue(ctx.applicationContext) }
     val savedAutoQueue by autoQueueFlow.collectAsState(initial = null)
     var selectedAutoQueue by remember { mutableStateOf<Boolean?>(null) }
@@ -150,6 +174,15 @@ fun ClientScreen(modifier: Modifier = Modifier) {
         TerminalHub.ensureStarted(ctx.applicationContext, CLIENT_COLS, CLIENT_ROWS)
     }
 
+    fun refreshOrder() {
+        scope.launch { order = withContext(Dispatchers.Default) { runCatching { loadOrder() }.getOrNull() } }
+    }
+
+    // Read the order setting once the session is ready and whenever the tab changes (Settings may have changed it).
+    LaunchedEffect(state.ready, section) {
+        if (state.ready) order = withContext(Dispatchers.Default) { runCatching { loadOrder() }.getOrNull() }
+    }
+
     /**
      * Sends a command that replaces yewtube's result list. The search results are put aside first so
      * coming back to Search restores them without a new search; the old list stays hidden until the
@@ -174,6 +207,18 @@ fun ClientScreen(modifier: Modifier = Modifier) {
             lastQuery = text
             TerminalPreferences.addSearch(ctx, text)
             replaceResults(Section.SEARCH, "/$text")
+            refreshOrder()
+        }
+    }
+
+    /** The order is applied when results are fetched, so a new choice repeats the current search. */
+    fun pickOrder(value: String) {
+        scope.launch {
+            val saved = withContext(Dispatchers.Default) { runCatching { saveOrder(value) }.getOrDefault(false) }
+            refreshOrder()
+            if (saved && lastQuery.isNotEmpty() && resultsFrom == Section.SEARCH) {
+                replaceResults(Section.SEARCH, "/$lastQuery")
+            }
         }
     }
 
@@ -259,6 +304,32 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                     )
                     IconButton(onClick = { search() }) {
                         Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.client_search), tint = FG)
+                    }
+                }
+                order?.let { current ->
+                    Row(
+                        Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(stringResource(R.string.orderui_label), style = small)
+                        Box {
+                            Text(
+                                orderName(current.value) + " \u25BE",
+                                style = small.copy(color = ACCENT),
+                                modifier = Modifier.clickable { orderMenu = true }.padding(horizontal = 8.dp, vertical = 8.dp)
+                            )
+                            DropdownMenu(expanded = orderMenu, onDismissRequest = { orderMenu = false }) {
+                                current.options.forEach { value ->
+                                    DropdownMenuItem(
+                                        text = { Text(orderName(value)) },
+                                        onClick = {
+                                            orderMenu = false
+                                            if (value != current.value) pickOrder(value)
+                                        }
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
