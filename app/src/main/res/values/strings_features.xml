@@ -3,7 +3,7 @@
     <string name="feat_terminal_section">Terminal</string>
     <string name="feat_terminal_title">Enable the terminal</string>
     <string name="feat_terminal_desc">When off, the app shows only the interface: there is no terminal and the Terminal/UI label in the header is hidden.</string>
-    <string name="feat_queue_label">Queue:</string>
+    <string name="feat_queue_label">Playback:</string>
     <string name="feat_queue_none">Only this video</string>
     <string name="feat_queue_page">What is on screen</string>
     <string name="feat_queue_related">YouTube suggestions</string>
