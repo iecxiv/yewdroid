@@ -68,9 +68,6 @@ private val FG = Color(0xFFDCDFE4)
 private val ACCENT = Color(0xFF98C379)
 private val MUTED = Color(0xFF7F848E)
 
-/** Background of the result tapped while its video loads (a little stronger than the queue's, to be seen). */
-private val PENDING_BG = Color(0xFF223A24)
-
 /** Virtual screen the yewtube session uses while the native client is shown (sets the page size). */
 private const val CLIENT_COLS = 100
 private const val CLIENT_ROWS = 24
@@ -209,7 +206,7 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     val downloads by DownloadHub.downloads.collectAsState()
     val formats by DownloadHub.formats.collectAsState()
     val loadingPlay by TerminalHub.loadingPlay.collectAsState()
-    // Number of the result tapped while its video loads: that row is marked until the video starts.
+    // Number of the result tapped while its video loads: that row is marked in green.
     val pendingResult by TerminalHub.pendingResult.collectAsState()
     val activeDownloads = downloads.items.count { it.active }
     val terminalTouched = remember { ClientMemory.takeTerminalTouch() }
@@ -452,24 +449,19 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                 val listName = if (section == Section.PLAYLISTS) openedPlaylist else null
                 LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
                     items(shownItems, key = { "${it.n}-${it.id}" }) { item ->
-                        // The result tapped while its video loads is marked in green until the video starts.
-                        Box(
-                            Modifier.fillMaxWidth()
-                                .background(if (pendingResult == item.n) PENDING_BG else Color.Transparent)
-                        ) {
-                            ResultRow(
-                                item,
-                                playlist = state.mode == "ytpl",
-                                queueRest = autoQueue ?: true,
-                                onAdd = { adding = it },
-                                onDownload = { kind -> DownloadHub.loadFormats(item.id, item.title, kind) },
-                                onRemove = if (listName != null) {
-                                    { TerminalHub.runCommand("plrm $listName ${item.n}") }
-                                } else {
-                                    null
-                                }
-                            )
-                        }
+                        ResultRow(
+                            item,
+                            playlist = state.mode == "ytpl",
+                            queueRest = autoQueue ?: true,
+                            marked = loadingPlay && pendingResult == item.n,
+                            onAdd = { adding = it },
+                            onDownload = { kind -> DownloadHub.loadFormats(item.id, item.title, kind) },
+                            onRemove = if (listName != null) {
+                                { TerminalHub.runCommand("plrm $listName ${item.n}") }
+                            } else {
+                                null
+                            }
+                        )
                     }
                 }
             }
@@ -788,17 +780,22 @@ private fun SearchHistoryPanel(
     }
 }
 
+/**
+ * One result of the list. [marked] is true for the result tapped while its video loads: the row gets the same
+ * green as the playing entry of the queue, and its title turns green.
+ */
 @Composable
 private fun ResultRow(
     item: ClientItem,
     playlist: Boolean,
     queueRest: Boolean,
+    marked: Boolean = false,
     onAdd: (Int) -> Unit,
     onDownload: (String) -> Unit,
     onRemove: (() -> Unit)? = null
 ) {
     var menu by remember { mutableStateOf(false) }
-    val titleStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = FG)
+    val titleStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = if (marked) ACCENT else FG)
     val subtitleStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = MUTED)
     val subtitle = if (playlist) {
         listOf(item.author, if (item.count.isNotEmpty()) stringResource(R.string.client_playlist_count, item.count) else "")
@@ -807,9 +804,10 @@ private fun ResultRow(
     }.filter { it.isNotEmpty() }.joinToString(" \u00b7 ")
     Row(
         Modifier.fillMaxWidth()
+            .background(if (marked) Color(0xFF1B241B) else Color.Transparent)
             .clickable {
-                // Playlists open; videos play (and queue the rest of the page when auto-queue is on). Tapping
-                // the same result again while it loads is ignored; tapping another replaces the pending one.
+                // Playlists open; videos play (and queue the rest of the page when auto-queue is on). Tapping the
+                // same video again while it loads is ignored; tapping another one replaces the pending request.
                 if (playlist) {
                     TerminalHub.runCommand(item.n.toString())
                 } else {
