@@ -428,6 +428,9 @@ private fun SettingsScreen(resumes: Int, onBack: () -> Unit) {
                     }
                 }
             }
+
+            AboutSettings()
+
             Spacer(Modifier.height(24.dp))
         }
     }
