@@ -79,7 +79,11 @@ object TerminalHub {
     val shuffle = MutableStateFlow(false)
     /** Repeat chosen in the player: 0 = off, 1 = the list, 2 = the current track. */
     val repeat = MutableStateFlow(0)
-    /** True from tapping a video until it starts (or fails): the client shows it and ignores more taps. */
+    /**
+     * True while the video of a track is being found, whatever started the wait: a tap on a result, next,
+     * previous, a tap in the queue, the automatic advance at the end of a track, or a restart after a
+     * setting changed. The screens show "Getting the video" while it is true.
+     */
     val loadingPlay = MutableStateFlow(false)
     /**
      * Queue entry the user just chose (next, previous or a tap in the queue) while its video is still being
@@ -104,8 +108,12 @@ object TerminalHub {
     /** Where to resume the track that is started again after the "show video" setting changed, and its title. */
     @Volatile private var resumeMs = 0L
     @Volatile private var resumeTitle = ""
-    /** When the play request now pending was made (ms), to tell it from a later one. */
+    /** When the play request made by a tap now pending was made (ms), to tell it from a later one. */
     @Volatile private var playPendingSince = 0L
+    /** True from a tap on a result until its track starts: further taps are ignored meanwhile. */
+    @Volatile private var tapPending = false
+    /** When the "getting the video" notice was last raised (ms), so an old timeout cannot clear a newer one. */
+    @Volatile private var loadingSince = 0L
     /** True when Android refused audio focus to a track that never started: it starts when the app is in front. */
     @Volatile private var resumeOnForeground = false
     private var surface: SurfaceView? = null
@@ -117,7 +125,12 @@ object TerminalHub {
     private val listener = object : Player.Listener {
         override fun onPlaybackStateChanged(state: Int) {
             // "ended" (the track finished by itself) differs from "next" (the user skipped) for repeat-one.
-            if (state == Player.STATE_ENDED && playing.value) event("ended")
+            if (state == Player.STATE_ENDED && playing.value) {
+                // The next track is looked up now; say so when there is one (or the list or track repeats).
+                val q = _queue.value
+                if (q.index + 1 < q.items.size || repeat.value != 0) showLoading()
+                event("ended")
+            }
         }
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             audioOn.value = isPlaying
@@ -144,7 +157,10 @@ object TerminalHub {
         }
         override fun onPlayerError(error: PlaybackException) {
             onWrite("\n\u001b[31m[player] ${error.errorCodeName}\u001b[0m\n")
-            if (playing.value) event("next")
+            if (playing.value) {
+                showLoading()
+                event("next")
+            }
         }
     }
 
@@ -163,6 +179,23 @@ object TerminalHub {
     fun unregisterPlayer() {
         exo?.removeListener(listener)
         exo = null
+    }
+
+    /**
+     * Raises the "getting the video" notice. It goes away when a track starts or playback stops, or after
+     * [PLAY_PENDING_MS] if neither is ever reported.
+     */
+    private fun showLoading() {
+        val stamp = System.currentTimeMillis()
+        loadingSince = stamp
+        loadingPlay.value = true
+        scope.launch {
+            delay(PLAY_PENDING_MS)
+            if (loadingSince == stamp) {
+                loadingPlay.value = false
+                tapPending = false
+            }
+        }
     }
 
     /**
@@ -315,6 +348,7 @@ object TerminalHub {
         if (needed) {
             resumeMs = positionMs.value
             resumeTitle = nowPlaying.value
+            showLoading()
             runCatching { module.callAttr("restream") }
         }
     }
@@ -355,21 +389,17 @@ object TerminalHub {
 
     /**
      * Sends a command that starts playback. Getting the video can take many seconds the first time, and a
-     * second tap meanwhile would be queued and restart the track once the first one starts, so taps are
-     * ignored while one is pending. Returns false when this one was ignored.
+     * second tap meanwhile would be queued and restart the track once the first one starts, so taps on results
+     * are ignored while one is pending. Returns false when this one was ignored.
      */
     fun runPlay(line: String): Boolean {
         if (py == null) return false
         val now = System.currentTimeMillis()
-        if (loadingPlay.value && now - playPendingSince < PLAY_PENDING_MS) return false
+        if (tapPending && now - playPendingSince < PLAY_PENDING_MS) return false
         playPendingSince = now
-        loadingPlay.value = true
+        tapPending = true
+        showLoading()
         runCommand(line)
-        // If neither the start nor a failure is ever reported, the request is not kept pending for ever.
-        scope.launch {
-            delay(PLAY_PENDING_MS)
-            if (playPendingSince == now) loadingPlay.value = false
-        }
         return true
     }
 
@@ -395,7 +425,10 @@ object TerminalHub {
 
     /** Skips to track [index] of the current playback queue; the entry is marked at once. */
     fun jumpTo(index: Int) {
-        if (index in _queue.value.items.indices) pendingIndex.value = index
+        if (index in _queue.value.items.indices) {
+            pendingIndex.value = index
+            showLoading()
+        }
         scope.launch {
             runCatching { Python.getInstance().getModule("yt_client").callAttr("jump", index) }
         }
@@ -403,17 +436,19 @@ object TerminalHub {
 
     /**
      * Marks the entry next to the one shown as chosen ([delta] is +1 for next, -1 for previous), repeating
-     * presses move it further. At the end of the list it wraps only when the whole list repeats.
+     * presses move it further. At the end of the list it wraps only when the whole list repeats. Returns
+     * whether there is an entry to go to.
      */
-    private fun markPending(delta: Int) {
+    private fun markPending(delta: Int): Boolean {
         val items = _queue.value.items
-        if (items.size < 2) return
+        if (items.size < 2) return false
         var target = (pendingIndex.value ?: _queue.value.index) + delta
         if (target !in items.indices) {
-            if (repeat.value != 1) return
+            if (repeat.value != 1) return false
             target = (target + items.size) % items.size
         }
         pendingIndex.value = target
+        return true
     }
 
     /** Turns shuffle on or off; the queue shown is re-read because its order changes. */
@@ -440,6 +475,7 @@ object TerminalHub {
     fun onPlay(url: String, title: String, artist: String, thumb: String) {
         // The video is in hand and starting: it is no longer a pending request.
         loadingPlay.value = false
+        tapPending = false
         resumeOnForeground = false
         // The same track started again after the "show video" setting changed resumes where it was.
         val start = if (resumeMs > 0L && title == resumeTitle) resumeMs else 0L
@@ -474,6 +510,7 @@ object TerminalHub {
     fun onStopPlayback() {
         // Playback ended, or a play request failed before starting: nothing is pending any more.
         loadingPlay.value = false
+        tapPending = false
         resumeOnForeground = false
         playing.value = false
         nowPlaying.value = ""
@@ -515,11 +552,11 @@ object TerminalHub {
             "seekf" -> main.post { exo?.let { it.seekTo(it.currentPosition + 10_000) } }
             "seekb" -> main.post { exo?.let { it.seekTo((it.currentPosition - 10_000).coerceAtLeast(0)) } }
             "next" -> {
-                markPending(+1)
+                if (markPending(+1)) showLoading()
                 event(action)
             }
             "prev" -> {
-                markPending(-1)
+                if (markPending(-1)) showLoading()
                 event(action)
             }
             else -> event(action)

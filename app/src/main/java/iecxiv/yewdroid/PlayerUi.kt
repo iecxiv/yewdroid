@@ -53,6 +53,7 @@ fun MiniPlayer(onOpen: () -> Unit) {
     val position by TerminalHub.positionMs.collectAsState()
     val duration by TerminalHub.durationMs.collectAsState()
     val queue by TerminalHub.queue.collectAsState()
+    val loadingPlay by TerminalHub.loadingPlay.collectAsState()
     val current = queue.items.getOrNull(queue.index)
     val fraction = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
     Column(Modifier.fillMaxWidth().background(Color(0xFF151515)).clickable(onClick = onOpen)) {
@@ -86,12 +87,21 @@ fun MiniPlayer(onOpen: () -> Unit) {
                     title, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = FG)
                 )
-                val author = current?.author.orEmpty()
-                if (author.isNotEmpty()) {
+                if (loadingPlay) {
+                    // The next track is being found: the line under the title says so.
                     Text(
-                        author, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = MUTED)
+                        stringResource(R.string.client_loading_track),
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = ACCENT)
                     )
+                } else {
+                    val author = current?.author.orEmpty()
+                    if (author.isNotEmpty()) {
+                        Text(
+                            author, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = MUTED)
+                        )
+                    }
                 }
             }
             IconButton(onClick = { TerminalHub.control("toggle") }) {
@@ -121,6 +131,7 @@ fun PlayerScreen(onClose: () -> Unit, onFullscreen: () -> Unit, modifier: Modifi
     val videoAspect by TerminalHub.videoAspect.collectAsState()
     val queue by TerminalHub.queue.collectAsState()
     val pendingIndex by TerminalHub.pendingIndex.collectAsState()
+    val loadingPlay by TerminalHub.loadingPlay.collectAsState()
     val shuffle by TerminalHub.shuffle.collectAsState()
     val repeat by TerminalHub.repeat.collectAsState()
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -170,12 +181,20 @@ fun PlayerScreen(onClose: () -> Unit, onFullscreen: () -> Unit, modifier: Modifi
                 title, maxLines = 2, overflow = TextOverflow.Ellipsis,
                 style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 16.sp, color = Color.White)
             )
-            val author = current?.author.orEmpty()
-            if (author.isNotEmpty()) {
+            if (loadingPlay) {
+                // The next track is being found: say so here too, since this panel covers the client's notice.
                 Text(
-                    author,
-                    style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = MUTED)
+                    stringResource(R.string.client_loading_track),
+                    style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = ACCENT)
                 )
+            } else {
+                val author = current?.author.orEmpty()
+                if (author.isNotEmpty()) {
+                    Text(
+                        author,
+                        style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = MUTED)
+                    )
+                }
             }
         }
         SeekBar(Modifier.fillMaxWidth())
