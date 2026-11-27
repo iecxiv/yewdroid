@@ -212,6 +212,8 @@ private fun SettingsScreen(resumes: Int, onBack: () -> Unit) {
     val savedLanguage by languageFlow.collectAsState(initial = null)
     var selectedLanguage by remember { mutableStateOf<String?>(null) }
     val language = selectedLanguage ?: savedLanguage
+    val terminalEnabledFlow = remember(ctx.applicationContext) { FeaturePrefs.terminalEnabled(ctx.applicationContext) }
+    val terminalEnabled by terminalEnabledFlow.collectAsState(initial = true)
     var appLanguage by remember { mutableStateOf(AppLanguage.saved(ctx)) }
     var startupTab by remember { mutableStateOf(UiPrefs.defaultTab(ctx)) }
     var clearDownloads by remember { mutableStateOf(UiPrefs.clearDownloadsOnClose(ctx)) }
@@ -348,6 +350,8 @@ private fun SettingsScreen(resumes: Int, onBack: () -> Unit) {
                 }
             }
 
+            FeatureSettings()
+
             SettingsSection(stringResource(R.string.settings_permissions_section)) {
                 PermissionRow(
                     stringResource(R.string.permission_notifications),
@@ -365,7 +369,7 @@ private fun SettingsScreen(resumes: Int, onBack: () -> Unit) {
                 ) { Text(stringResource(R.string.settings_open_system)) }
             }
 
-            if (language != null) {
+            if (language != null && terminalEnabled) {
                 SettingsSection(stringResource(R.string.language_section)) {
                     Text(stringResource(R.string.language_section_desc), style = note)
                     LANGUAGES.forEach { (value, label) ->
