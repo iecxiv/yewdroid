@@ -84,6 +84,22 @@ def jump(index):
     return True
 
 
+def history_remove(ytid):
+    """Removes a video from the play history (every entry with that id) and saves it. True when it changed.
+    The list on screen is not touched: the caller shows the history again."""
+    from mps_youtube import g, history
+    entry = g.userhist.get("history")
+    if not entry:
+        return False
+    songs = entry.songs
+    before = len(songs)
+    songs[:] = [song for song in songs if song.ytid != str(ytid)]
+    changed = len(songs) != before
+    if changed:
+        history.save()
+    return changed
+
+
 def playlists():
     """JSON with the saved local playlists, numbered as the open/play/rmp commands expect."""
     from mps_youtube import g

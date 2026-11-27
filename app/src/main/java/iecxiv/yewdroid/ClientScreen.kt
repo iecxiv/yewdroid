@@ -167,8 +167,7 @@ private val PLAY_ACTIONS: List<Pair<Int, (Int, Boolean) -> String>> = listOf(
 /** Menu actions after "Add to playlist". */
 private val OTHER_ACTIONS: List<Pair<Int, (Int, Boolean) -> String>> = listOf(
     R.string.client_share to { n, _ -> "share $n" },
-    R.string.client_open_with to { n, _ -> "openwith $n" },
-    R.string.client_more_from to { n, _ -> "u $n" }
+    R.string.client_open_with to { n, _ -> "openwith $n" }
 )
 
 private val thumbnails = LruCache<String, ImageBitmap>(120)
@@ -293,6 +292,16 @@ fun ClientScreen(modifier: Modifier = Modifier) {
             TerminalHub.runCommands("viewstash", command)
         } else {
             TerminalHub.runCommand(command)
+        }
+    }
+
+    /** Removes one video from the play history and shows the history again so the list is up to date. */
+    fun removeFromHistory(id: String) {
+        scope.launch {
+            withContext(Dispatchers.Default) {
+                runCatching { Python.getInstance().getModule("yt_client").callAttr("history_remove", id) }
+            }
+            TerminalHub.runCommand("history")
         }
     }
 
@@ -447,8 +456,19 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                 }
             } else {
                 val listName = if (section == Section.PLAYLISTS) openedPlaylist else null
+                val inHistory = section == Section.HISTORY
                 LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
                     items(shownItems, key = { "${it.n}-${it.id}" }) { item ->
+                        // An entry of an opened playlist or of the history can be removed from it.
+                        val remove: (() -> Unit)? = when {
+                            listName != null -> {
+                                { TerminalHub.runCommand("plrm $listName ${item.n}") }
+                            }
+                            inHistory -> {
+                                { removeFromHistory(item.id) }
+                            }
+                            else -> null
+                        }
                         ResultRow(
                             item,
                             playlist = state.mode == "ytpl",
@@ -456,11 +476,8 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                             marked = loadingPlay && pendingResult == item.n,
                             onAdd = { adding = it },
                             onDownload = { kind -> DownloadHub.loadFormats(item.id, item.title, kind) },
-                            onRemove = if (listName != null) {
-                                { TerminalHub.runCommand("plrm $listName ${item.n}") }
-                            } else {
-                                null
-                            }
+                            onRemove = remove,
+                            removeLabel = if (inHistory) R.string.history_remove_item else R.string.pledit_remove
                         )
                     }
                 }
@@ -782,7 +799,8 @@ private fun SearchHistoryPanel(
 
 /**
  * One result of the list. [marked] is true for the result tapped while its video loads: the row gets the same
- * green as the playing entry of the queue, and its title turns green.
+ * green as the playing entry of the queue, and its title turns green. [onRemove], when given, adds a menu
+ * entry named [removeLabel] (remove from the opened playlist, or from the history).
  */
 @Composable
 private fun ResultRow(
@@ -792,7 +810,8 @@ private fun ResultRow(
     marked: Boolean = false,
     onAdd: (Int) -> Unit,
     onDownload: (String) -> Unit,
-    onRemove: (() -> Unit)? = null
+    onRemove: (() -> Unit)? = null,
+    removeLabel: Int = R.string.pledit_remove
 ) {
     var menu by remember { mutableStateOf(false) }
     val titleStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = if (marked) ACCENT else FG)
@@ -876,7 +895,7 @@ private fun ResultRow(
                     )
                     if (onRemove != null) {
                         DropdownMenuItem(
-                            text = { Text(stringResource(R.string.pledit_remove)) },
+                            text = { Text(stringResource(removeLabel)) },
                             onClick = {
                                 menu = false
                                 onRemove()
