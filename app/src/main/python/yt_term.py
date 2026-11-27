@@ -42,6 +42,16 @@ _DEFAULT_ARTIST = "YewDroid"
 _LOWRES = [None]
 # URLs of audio streams chosen instead of a video one, so the "show video" check does not restart them.
 _AUDIO_FALLBACK_URLS = set()
+# Set while a new play request waits for the playback thread to end: the lookup that thread may be in the
+# middle of (finding the stream of a video) is abandoned at its next network request.
+_CANCEL = threading.Event()
+# Name of the playback thread (see androidplayer.play).
+_PLAYER_THREAD = "yewtube-player"
+
+
+class _Superseded(BaseException):
+    """Raised inside the playback thread to abandon the lookup of a track a new play request replaces.
+    It is a BaseException so yewtube's own error handling (which skips to the next track) does not catch it."""
 
 
 def _tlog(message):
@@ -496,8 +506,9 @@ def _patch_subprocess_timing():
 
 def _patch_js_runtime():
     """Injects js_runtimes=quickjs and the imported YouTube cookies (files_dir/cookies.txt, when
-    present) into every yt_dlp.YoutubeDL instance. Also logs the time of each extract_info call and keeps
-    the channel name of every video it looks up."""
+    present) into every yt_dlp.YoutubeDL instance. Also logs the time of each extract_info call, keeps
+    the channel name of every video it looks up, and lets a lookup made by the playback thread be abandoned
+    when a new play request replaces it."""
     import yt_dlp
     qjs = _find_qjs()
     if qjs:
@@ -523,6 +534,9 @@ def _patch_js_runtime():
             super().__init__(p, auto_init)
 
         def urlopen(self, req):
+            # A new play request is waiting for this thread: stop looking up a video nobody wants any more.
+            if _CANCEL.is_set() and threading.current_thread().name == _PLAYER_THREAD:
+                raise _Superseded()
             started = time.monotonic()
             try:
                 return super().urlopen(req)
@@ -695,15 +709,21 @@ def _make_player_class(CmdPlayer):
                 self.song_no = next((i for i, s in enumerate(original) if s.ytid == current.ytid), index)
 
         def _stop_loop(self):
-            """Ends a background playback loop; False when it did not end in time."""
+            """Ends a background playback loop; False when it did not end in time. A lookup the loop is in the
+            middle of is abandoned (see _CANCEL) so a new play request does not wait for it."""
             thread = self._thread
             if thread is not None and thread.is_alive():
                 self._halt = True
                 self._action = "stop"
+                _CANCEL.set()
                 self._evt.set()
-                thread.join(30)
+                try:
+                    thread.join(30)
+                finally:
+                    _CANCEL.clear()
                 if thread.is_alive():
                     return False
+                _tlog("previous play request ended in time for the new one")
             self._thread = None
             self._halt = False
             return True
@@ -730,6 +750,8 @@ def _make_player_class(CmdPlayer):
             def loop():
                 try:
                     CmdPlayer.play(self, *args, **kwargs)
+                except _Superseded:
+                    _tlog("lookup abandoned: a new play request replaced it")
                 except BaseException:
                     traceback.print_exc(file=_orig_err)
                 finally:
@@ -747,7 +769,7 @@ def _make_player_class(CmdPlayer):
                     except Exception:
                         pass
 
-            self._thread = threading.Thread(target=loop, daemon=True, name="yewtube-player")
+            self._thread = threading.Thread(target=loop, daemon=True, name=_PLAYER_THREAD)
             self._thread.start()
             return None
 

@@ -113,8 +113,10 @@ object TerminalHub {
     @Volatile private var resumeTitle = ""
     /** When the play request made by a tap now pending was made (ms), to tell it from a later one. */
     @Volatile private var playPendingSince = 0L
-    /** True from a tap on a result until its track starts: further taps are ignored meanwhile. */
+    /** True from a tap on a result until its track starts. */
     @Volatile private var tapPending = false
+    /** The command of that tap: tapping the same result again while it loads is ignored. */
+    @Volatile private var pendingLine: String? = null
     /** When the "getting the video" notice was last raised (ms), so an old timeout cannot clear a newer one. */
     @Volatile private var loadingSince = 0L
     /** True when Android refused audio focus to a track that never started: it starts when the app is in front. */
@@ -197,6 +199,7 @@ object TerminalHub {
             if (loadingSince == stamp) {
                 loadingPlay.value = false
                 tapPending = false
+                pendingLine = null
             }
         }
     }
@@ -383,32 +386,43 @@ object TerminalHub {
         }
     }
 
-    /** Sends a yewtube command from the native client without echoing it in the terminal. */
-    fun runCommand(line: String) {
+    private fun sendCommand(line: String) {
         if (py == null) return
         _client.value = _client.value.copy(busy = true)
         scope.launch { runCatching { py?.callAttr("send", line) } }
     }
 
     /**
-     * Sends a command that starts playback. Getting the video can take many seconds the first time, and a
-     * second tap meanwhile would be queued and restart the track once the first one starts, so taps on results
-     * are ignored while one is pending. Returns false when this one was ignored.
+     * Sends a yewtube command from the native client without echoing it in the terminal. The results the
+     * client shows may change with it, so the "same result tapped again" memory of [runPlay] is dropped.
+     */
+    fun runCommand(line: String) {
+        pendingLine = null
+        sendCommand(line)
+    }
+
+    /**
+     * Sends a command that starts playback. Getting the video can take many seconds the first time. Tapping
+     * the same result again while it loads is ignored (it would only start the lookup over); tapping another
+     * one replaces the pending request: the lookup of the first is cancelled and the new one starts at once.
+     * Returns false when the tap was ignored.
      */
     fun runPlay(line: String): Boolean {
         if (py == null) return false
         val now = System.currentTimeMillis()
-        if (tapPending && now - playPendingSince < PLAY_PENDING_MS) return false
+        if (tapPending && line == pendingLine && now - playPendingSince < PLAY_PENDING_MS) return false
         playPendingSince = now
         tapPending = true
+        pendingLine = line
         showLoading()
-        runCommand(line)
+        sendCommand(line)
         return true
     }
 
     /** Sends several commands in order from one coroutine, so they cannot overtake each other. */
     fun runCommands(vararg lines: String) {
         if (py == null) return
+        pendingLine = null
         _client.value = _client.value.copy(busy = true)
         scope.launch { for (line in lines) runCatching { py?.callAttr("send", line) } }
     }
@@ -479,6 +493,7 @@ object TerminalHub {
         // The video is in hand and starting: it is no longer a pending request.
         loadingPlay.value = false
         tapPending = false
+        pendingLine = null
         resumeOnForeground = false
         // The same track started again after the "show video" setting changed resumes where it was.
         val start = if (resumeMs > 0L && title == resumeTitle) resumeMs else 0L
@@ -512,7 +527,7 @@ object TerminalHub {
 
     /**
      * The track playing was stopped because a new play request replaces it. The sound stops, but the request
-     * is still being resolved, so the "getting the video" notice and the tap guard stay as they are.
+     * is still being resolved, so the "getting the video" notice and the tap memory stay as they are.
      */
     fun onReplaced() {
         main.post {
@@ -526,6 +541,7 @@ object TerminalHub {
         // Playback ended, or a play request failed before starting: nothing is pending any more.
         loadingPlay.value = false
         tapPending = false
+        pendingLine = null
         resumeOnForeground = false
         playing.value = false
         nowPlaying.value = ""
