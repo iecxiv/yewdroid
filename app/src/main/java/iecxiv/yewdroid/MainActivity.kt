@@ -120,11 +120,14 @@ fun TerminalScreen() {
     val savedMode by modeFlow.collectAsState(initial = null)
     val headerFlow = remember(ctx.applicationContext) { TerminalPreferences.headerExpanded(ctx.applicationContext) }
     val savedHeader by headerFlow.collectAsState(initial = null)
-    // When the terminal is disabled in Settings the app shows only the interface and hides the Terminal/UI label.
+    // When the terminal is disabled in Settings the app shows only the interface: no Terminal/UI label and no
+    // arrow to expand the header (its only button, Settings, is then always visible). Until the setting is read
+    // the loading screen stays up, so the interface does not flash before the terminal.
     val enabledFlow = remember(ctx.applicationContext) { FeaturePrefs.terminalEnabled(ctx.applicationContext) }
-    val terminalEnabled by enabledFlow.collectAsState(initial = true)
+    val enabledState by enabledFlow.collectAsState(initial = null)
+    val terminalEnabled = enabledState ?: false
     var selectedMode by remember { mutableStateOf<Boolean?>(null) }
-    val terminalMode = (selectedMode ?: savedMode)?.let { it && terminalEnabled }
+    val terminalMode = if (enabledState == null) null else (selectedMode ?: savedMode)?.let { it && terminalEnabled }
     var selectedHeader by remember { mutableStateOf<Boolean?>(null) }
     val headerExpanded = selectedHeader ?: savedHeader
     var selectedZoom by remember { mutableStateOf<Float?>(null) }
@@ -256,7 +259,7 @@ fun TerminalScreen() {
                     .clickableNoRipple { changeZoom(1f) }.padding(12.dp))
             }
             AnimatedVisibility(
-                visible = headerExpanded,
+                visible = headerExpanded || !terminalEnabled,
                 enter = expandHorizontally(expandFrom = Alignment.End) + fadeIn(),
                 exit = shrinkHorizontally(shrinkTowards = Alignment.End) + fadeOut()
             ) {
@@ -290,16 +293,19 @@ fun TerminalScreen() {
                     }
                 }
             }
-            CtrlBtn(
-                Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                description = stringResource(
-                    if (headerExpanded) R.string.header_hide_options else R.string.header_show_options
-                ),
-                rotation = chevronRotation
-            ) {
-                val value = !headerExpanded
-                selectedHeader = value
-                TerminalPreferences.saveHeaderExpanded(ctx, value)
+            // The arrow that expands and collapses the header exists only with the terminal enabled.
+            if (terminalEnabled) {
+                CtrlBtn(
+                    Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                    description = stringResource(
+                        if (headerExpanded) R.string.header_hide_options else R.string.header_show_options
+                    ),
+                    rotation = chevronRotation
+                ) {
+                    val value = !headerExpanded
+                    selectedHeader = value
+                    TerminalPreferences.saveHeaderExpanded(ctx, value)
+                }
             }
         }
 

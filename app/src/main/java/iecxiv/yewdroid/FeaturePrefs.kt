@@ -1,6 +1,8 @@
 package iecxiv.yewdroid
 
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.util.Log
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -48,8 +50,35 @@ object FeaturePrefs {
         }
     }
 
-    /** Whether the terminal exists at all; when off the app shows only the interface. On by default. */
-    fun terminalEnabled(context: Context): Flow<Boolean> = data(context).map { it[terminalEnabledKey] ?: true }
+    /**
+     * True when this install replaced an older one (the app was updated), false on a fresh install. Android keeps
+     * the time of the first install and the time of the last update; they are the same on a fresh install.
+     * When it cannot be read it counts as an update, which keeps the terminal on.
+     */
+    private fun isUpdatedInstall(context: Context): Boolean = try {
+        val manager = context.packageManager
+        val info = if (Build.VERSION.SDK_INT >= 33) {
+            manager.getPackageInfo(context.packageName, PackageManager.PackageInfoFlags.of(0))
+        } else {
+            @Suppress("DEPRECATION")
+            manager.getPackageInfo(context.packageName, 0)
+        }
+        info.lastUpdateTime - info.firstInstallTime > 2000L
+    } catch (_: Exception) {
+        true
+    }
+
+    /**
+     * Whether the terminal exists at all; when off the app shows only the interface. Until the user chooses, it is
+     * off on a fresh install and on when the app was updated from a version that always had the terminal. The first
+     * answer is stored, so a later update does not change it.
+     */
+    fun terminalEnabled(context: Context): Flow<Boolean> {
+        val app = context.applicationContext
+        return data(context).map { values ->
+            values[terminalEnabledKey] ?: isUpdatedInstall(app).also { saveTerminalEnabled(app, it) }
+        }
+    }
 
     fun saveTerminalEnabled(context: Context, enabled: Boolean) {
         val app = context.applicationContext
