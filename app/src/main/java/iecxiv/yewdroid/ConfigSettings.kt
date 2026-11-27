@@ -102,6 +102,14 @@ private fun saveKeepOriginal(value: Boolean) {
     Python.getInstance().getModule("android_dl_encode").callAttr("set_keep_original", value)
 }
 
+/** What to do when a video has no stream within the maximum resolution: "up" or "audio" (stored by yt_term.py). */
+private fun loadLowRes(): String =
+    Python.getInstance().getModule("yt_term").callAttr("lowres_mode").toString()
+
+private fun saveLowRes(value: String) {
+    Python.getInstance().getModule("yt_term").callAttr("set_lowres_mode", value)
+}
+
 /** Option key to its name and description. */
 private val LABELS = mapOf(
     "AUDIO_FORMAT" to (R.string.cfgui_audio_format to R.string.cfgui_audio_format_desc),
@@ -133,6 +141,8 @@ internal fun ConfigSettings(resumes: Int) {
     var resetting by remember { mutableStateOf(false) }
     var reloads by remember { mutableIntStateOf(0) }
     var keepOriginal by remember { mutableStateOf(false) }
+    var lowRes by remember { mutableStateOf("up") }
+    var editingLowRes by remember { mutableStateOf(false) }
 
     // The session must have finished starting (config loaded, presets read) before reading or writing.
     LaunchedEffect(client.ready, resumes, reloads) {
@@ -141,6 +151,7 @@ internal fun ConfigSettings(resumes: Int) {
             state = result.getOrNull()
             failed = result.isFailure
             keepOriginal = withContext(Dispatchers.Default) { runCatching { loadKeepOriginal() }.getOrDefault(false) }
+            lowRes = withContext(Dispatchers.Default) { runCatching { loadLowRes() }.getOrDefault("up") }
         }
     }
 
@@ -154,6 +165,11 @@ internal fun ConfigSettings(resumes: Int) {
     fun changeKeepOriginal(value: Boolean) {
         keepOriginal = value
         scope.launch { withContext(Dispatchers.Default) { runCatching { saveKeepOriginal(value) } } }
+    }
+
+    fun changeLowRes(value: String) {
+        lowRes = value
+        scope.launch { withContext(Dispatchers.Default) { runCatching { saveLowRes(value) } } }
     }
 
     val body = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 15.sp, color = FG)
@@ -195,6 +211,10 @@ internal fun ConfigSettings(resumes: Int) {
                             )
                         )
                     }
+                }
+                // What to do when a video has nothing within the maximum resolution, right under that option.
+                if (option.key == "MAX_RES") {
+                    LowResRow(lowRes) { editingLowRes = true }
                 }
             }
         }
@@ -294,6 +314,16 @@ internal fun ConfigSettings(resumes: Int) {
             )
         }
     }
+    if (editingLowRes) {
+        LowResDialog(
+            mode = lowRes,
+            onPick = { value ->
+                editingLowRes = false
+                changeLowRes(value)
+            },
+            onDismiss = { editingLowRes = false }
+        )
+    }
     if (resetting) {
         ConfirmDialog(
             title = stringResource(R.string.cfgui_reset_confirm),
@@ -308,6 +338,80 @@ internal fun ConfigSettings(resumes: Int) {
             onDismiss = { resetting = false }
         )
     }
+}
+
+/** The row that shows the chosen way to handle a video with nothing within the maximum resolution. */
+@Composable
+private fun LowResRow(mode: String, onClick: () -> Unit) {
+    val body = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 15.sp, color = FG)
+    val note = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = Color.Gray)
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(R.string.lowres_title), style = body)
+            Text(stringResource(R.string.lowres_desc), style = note)
+            Text(
+                stringResource(if (mode == "audio") R.string.lowres_audio else R.string.lowres_up),
+                style = body.copy(color = ACCENT),
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
+    }
+}
+
+/** The two ways to handle it, each with its explanation. */
+@Composable
+private fun LowResDialog(mode: String, onPick: (String) -> Unit, onDismiss: () -> Unit) {
+    val body = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 15.sp, color = FG)
+    val note = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = Color.Gray)
+    val choices = listOf(
+        Triple("up", R.string.lowres_up, R.string.lowres_up_desc),
+        Triple("audio", R.string.lowres_audio, R.string.lowres_audio_desc)
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF1B1B1B),
+        title = {
+            Text(
+                stringResource(R.string.lowres_title),
+                style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 16.sp, color = FG)
+            )
+        },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                choices.forEach { (value, label, description) ->
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .selectable(
+                                selected = value == mode,
+                                role = Role.RadioButton,
+                                onClick = { onPick(value) }
+                            )
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        RadioButton(
+                            selected = value == mode,
+                            onClick = null,
+                            colors = RadioButtonDefaults.colors(selectedColor = ACCENT, unselectedColor = FG)
+                        )
+                        Column(Modifier.padding(start = 12.dp)) {
+                            Text(stringResource(label), style = body)
+                            Text(stringResource(description), style = note)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss, colors = ButtonDefaults.textButtonColors(contentColor = Color.Gray)) {
+                Text(stringResource(R.string.dialog_cancel))
+            }
+        }
+    )
 }
 
 @Composable

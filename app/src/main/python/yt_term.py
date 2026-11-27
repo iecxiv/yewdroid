@@ -37,6 +37,11 @@ _PRELOAD_WAIT = 20.0
 _UPLOADERS = {}
 # Artist shown when the channel of a track is unknown.
 _DEFAULT_ARTIST = "YewDroid"
+# What to do when a video has no stream within max_res: "up" (next higher resolution) or "audio" (audio only).
+# None until read from the file.
+_LOWRES = [None]
+# URLs of audio streams chosen instead of a video one, so the "show video" check does not restart them.
+_AUDIO_FALLBACK_URLS = set()
 
 
 def _tlog(message):
@@ -79,6 +84,36 @@ def _artist(song):
     if name:
         return name
     return _clean_artist(getattr(song, "uploader", None) or getattr(song, "author", None)) or _DEFAULT_ARTIST
+
+
+def _lowres_file():
+    return os.path.join(os.environ.get("HOME", ""), "lowres_mode.txt")
+
+
+def lowres_mode():
+    """What to do when a video has no stream within max_res: "up" (default) or "audio"."""
+    if _LOWRES[0] is None:
+        mode = "up"
+        try:
+            with open(_lowres_file()) as f:
+                if f.read().strip() == "audio":
+                    mode = "audio"
+        except OSError:
+            pass
+        _LOWRES[0] = mode
+    return _LOWRES[0]
+
+
+def set_lowres_mode(mode):
+    """Chooses and stores what to do when a video has no stream within max_res."""
+    mode = "audio" if str(mode) == "audio" else "up"
+    _LOWRES[0] = mode
+    try:
+        with open(_lowres_file(), "w") as f:
+            f.write(mode)
+    except OSError:
+        pass
+    return mode
 
 
 class _Out:
@@ -188,6 +223,9 @@ def sync_video_mode():
         if getattr(p, "override", False) in ("audio", "fullscreen", "window", "forcevid"):
             return False
         stream = getattr(p, "stream", None)
+        # Audio chosen because the video had nothing within max_res is not a mismatch with the setting.
+        if isinstance(stream, dict) and stream.get("url") in _AUDIO_FALLBACK_URLS:
+            return False
         current = isinstance(stream, dict) and stream.get("mtype") == "video"
         return wanted != current
     except Exception:
@@ -358,6 +396,61 @@ def _patch_preload():
         threading.Thread(target=later, daemon=True, name="yewtube-preload-wait").start()
 
     streams.preload = preload
+
+
+def _patch_select():
+    """yewtube only plays streams that carry audio and video together, and drops those taller than max_res.
+    Many videos have none at or below a low max_res, and then nothing plays. When that happens, playback
+    (and the preload that prepares it) follows the user's choice: the lowest resolution above the limit, or
+    the audio alone. Downloads keep yewtube's own behaviour."""
+    from mps_youtube import streams
+    original = streams.select
+
+    def select(slist, q=0, audio=False, m4a_ok=True, maxres=None):
+        result = original(slist, q, audio, m4a_ok, maxres)
+        if result is not None or audio:
+            return result
+        try:
+            caller = sys._getframe(1).f_globals.get("__name__", "")
+        except Exception:
+            caller = ""
+        if caller not in ("mps_youtube.player", "mps_youtube.streams"):
+            return None
+        items = slist["meta"] if isinstance(slist, dict) else slist
+        limit = maxres
+        try:
+            from mps_youtube import config
+            limit = limit or config.MAX_RES.get
+        except Exception:
+            pass
+        if lowres_mode() == "audio":
+            fallback = original(slist, q, True, m4a_ok, maxres)
+            if fallback is not None:
+                _AUDIO_FALLBACK_URLS.add(fallback["url"])
+                what = "playing audio only"
+        else:
+            videos = []
+            for item in items:
+                if item.get("mtype") == "video":
+                    try:
+                        videos.append((int(item["quality"].split("x")[1]), item))
+                    except (ValueError, IndexError, KeyError):
+                        pass
+            videos.sort(key=lambda pair: pair[0])
+            fallback = None
+            if videos:
+                height, fallback = videos[min(q, len(videos) - 1)]
+                what = "playing at %sp" % height
+        if fallback is not None and caller == "mps_youtube.player":
+            try:
+                sys.stdout.write("\n\x1b[33m[max_res] No stream up to %sp for this video: %s.\x1b[0m\n" % (
+                    limit, what))
+                _tlog("max_res fallback: %s" % what)
+            except Exception:
+                pass
+        return fallback
+
+    streams.select = select
 
 
 def _find_qjs():
@@ -758,6 +851,10 @@ def _run(files_dir):
         _patch_traceback()
         try:
             _patch_preload()
+        except Exception:
+            traceback.print_exc(file=_orig_err)
+        try:
+            _patch_select()
         except Exception:
             traceback.print_exc(file=_orig_err)
         yplayer.history = _NoHistoryAdd(yhistory)

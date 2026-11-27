@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lowres_title">When a video has nothing within the maximum resolution</string>
+    <string name="lowres_desc">Some videos have no stream at or below the maximum resolution set above, and would not play. Choose what to do with them.</string>
+    <string name="lowres_up">Play at the next higher resolution</string>
+    <string name="lowres_up_desc">The video plays at the lowest resolution available above your limit. It always plays, but uses more data than you asked for.</string>
+    <string name="lowres_audio">Play audio only</string>
+    <string name="lowres_audio_desc">Your limit is respected: the sound plays with the thumbnail and no video is downloaded.</string>
+</resources>

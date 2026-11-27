@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lowres_title">Cuando un vídeo no tiene nada dentro de la resolución máxima</string>
+    <string name="lowres_desc">Algunos vídeos no tienen ningún flujo igual o inferior a la resolución máxima indicada arriba y no se reproducirían. Elige qué hacer con ellos.</string>
+    <string name="lowres_up">Reproducir con la siguiente resolución superior</string>
+    <string name="lowres_up_desc">El vídeo se reproduce con la resolución más baja disponible por encima de tu límite. Siempre suena, pero gasta más datos de los que pediste.</string>
+    <string name="lowres_audio">Reproducir solo el audio</string>
+    <string name="lowres_audio_desc">Se respeta tu límite: suena el audio con la miniatura y no se descarga vídeo.</string>
+</resources>
