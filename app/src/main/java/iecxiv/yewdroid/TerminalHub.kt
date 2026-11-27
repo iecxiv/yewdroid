@@ -94,9 +94,9 @@ object TerminalHub {
      */
     val pendingIndex = MutableStateFlow<Int?>(null)
     /**
-     * Number (the n of the client's items) of the result tapped while its video is still being found, in
-     * Search, Playlists or History, so the list can mark it. Null when nothing is pending; cleared when a track
-     * starts, when playback stops, when the list changes or when the wait times out.
+     * Number of the result in the list that was tapped to play, while its video is still being found, so the
+     * list can mark it. Null when nothing is pending, when the wait has another cause (next, queue...), and
+     * as soon as the list on screen changes.
      */
     val pendingResult = MutableStateFlow<Int?>(null)
 
@@ -192,6 +192,12 @@ object TerminalHub {
         exo = null
     }
 
+    /** Sets the tapped command now pending (or none) together with the result number the list marks. */
+    private fun setPendingLine(line: String?) {
+        pendingLine = line
+        pendingResult.value = line?.takeWhile { it.isDigit() }?.toIntOrNull()
+    }
+
     /**
      * Raises the "getting the video" notice. It goes away when a track starts or playback stops, or after
      * [PLAY_PENDING_MS] if neither is ever reported.
@@ -205,8 +211,7 @@ object TerminalHub {
             if (loadingSince == stamp) {
                 loadingPlay.value = false
                 tapPending = false
-                pendingLine = null
-                pendingResult.value = null
+                setPendingLine(null)
             }
         }
     }
@@ -405,8 +410,7 @@ object TerminalHub {
      * the tapped result are dropped.
      */
     fun runCommand(line: String) {
-        pendingLine = null
-        pendingResult.value = null
+        setPendingLine(null)
         sendCommand(line)
     }
 
@@ -414,7 +418,6 @@ object TerminalHub {
      * Sends a command that starts playback. Getting the video can take many seconds the first time. Tapping
      * the same result again while it loads is ignored (it would only start the lookup over); tapping another
      * one replaces the pending request: the lookup of the first is cancelled and the new one starts at once.
-     * The result tapped is remembered in [pendingResult] so the list can mark it until its video starts.
      * Returns false when the tap was ignored.
      */
     fun runPlay(line: String): Boolean {
@@ -423,9 +426,7 @@ object TerminalHub {
         if (tapPending && line == pendingLine && now - playPendingSince < PLAY_PENDING_MS) return false
         playPendingSince = now
         tapPending = true
-        pendingLine = line
-        // The command starts with the number of the result ("3", "3-", "3 -w"...).
-        pendingResult.value = line.trim().takeWhile { it.isDigit() }.toIntOrNull()
+        setPendingLine(line)
         showLoading()
         sendCommand(line)
         return true
@@ -434,8 +435,7 @@ object TerminalHub {
     /** Sends several commands in order from one coroutine, so they cannot overtake each other. */
     fun runCommands(vararg lines: String) {
         if (py == null) return
-        pendingLine = null
-        pendingResult.value = null
+        setPendingLine(null)
         _client.value = _client.value.copy(busy = true)
         scope.launch { for (line in lines) runCatching { py?.callAttr("send", line) } }
     }
@@ -506,8 +506,7 @@ object TerminalHub {
         // The video is in hand and starting: it is no longer a pending request.
         loadingPlay.value = false
         tapPending = false
-        pendingLine = null
-        pendingResult.value = null
+        setPendingLine(null)
         resumeOnForeground = false
         // The same track started again after the "show video" setting changed resumes where it was.
         val start = if (resumeMs > 0L && title == resumeTitle) resumeMs else 0L
@@ -555,8 +554,7 @@ object TerminalHub {
         // Playback ended, or a play request failed before starting: nothing is pending any more.
         loadingPlay.value = false
         tapPending = false
-        pendingLine = null
-        pendingResult.value = null
+        setPendingLine(null)
         resumeOnForeground = false
         playing.value = false
         nowPlaying.value = ""
