@@ -394,7 +394,10 @@ fun TerminalScreen() {
     }
 }
 
-/** The video above the terminal text, with a fullscreen button and the time bar that hide after a few seconds. */
+/**
+ * The video above the terminal text, with a fullscreen button and the time bar that hide after a few seconds.
+ * It never takes more than a third of the screen height (see videoBoxModifier).
+ */
 @Composable
 private fun InlineVideo(landscape: Boolean, videoAspect: Float, onFullscreen: () -> Unit) {
     var overlay by remember { mutableStateOf(true) }
@@ -411,10 +414,7 @@ private fun InlineVideo(landscape: Boolean, videoAspect: Float, onFullscreen: ()
         contentAlignment = Alignment.Center
     ) {
         val ratio = videoAspect.coerceIn(1f, 2.4f)
-        VideoSurface(
-            if (landscape) Modifier.height(150.dp).aspectRatio(ratio)
-            else Modifier.fillMaxWidth().aspectRatio(ratio)
-        )
+        VideoSurface(videoBoxModifier(landscape, ratio))
         if (overlay) {
             Box(Modifier.align(Alignment.TopEnd).background(Color(0x66000000))) {
                 CtrlBtn(Icons.Filled.Fullscreen) { onFullscreen() }

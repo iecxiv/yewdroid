@@ -155,10 +155,8 @@ fun PlayerScreen(onClose: () -> Unit, onFullscreen: () -> Unit, modifier: Modifi
         if (videoOn) {
             Box(Modifier.fillMaxWidth().background(Color.Black), contentAlignment = Alignment.Center) {
                 val ratio = videoAspect.coerceIn(1f, 2.4f)
-                VideoSurface(
-                    if (landscape) Modifier.height(150.dp).aspectRatio(ratio)
-                    else Modifier.fillMaxWidth().aspectRatio(ratio)
-                )
+                // Never more than a third of the screen height (see videoBoxModifier).
+                VideoSurface(videoBoxModifier(landscape, ratio))
                 Box(Modifier.align(Alignment.TopEnd).background(Color(0x66000000))) {
                     IconButton(onClick = onFullscreen) {
                         Icon(
