@@ -120,8 +120,14 @@ fun TerminalScreen() {
     val savedMode by modeFlow.collectAsState(initial = null)
     val headerFlow = remember(ctx.applicationContext) { TerminalPreferences.headerExpanded(ctx.applicationContext) }
     val savedHeader by headerFlow.collectAsState(initial = null)
+    // When the terminal is disabled in Settings the app shows only the interface: no Terminal/UI label and no
+    // arrow to expand the header (its only button, Settings, is then always visible). Until the setting is read
+    // the loading screen stays up, so the interface does not flash before the terminal.
+    val enabledFlow = remember(ctx.applicationContext) { FeaturePrefs.terminalEnabled(ctx.applicationContext) }
+    val enabledState by enabledFlow.collectAsState(initial = null)
+    val terminalEnabled = enabledState ?: false
     var selectedMode by remember { mutableStateOf<Boolean?>(null) }
-    val terminalMode = selectedMode ?: savedMode
+    val terminalMode = if (enabledState == null) null else (selectedMode ?: savedMode)?.let { it && terminalEnabled }
     var selectedHeader by remember { mutableStateOf<Boolean?>(null) }
     val headerExpanded = selectedHeader ?: savedHeader
     var selectedZoom by remember { mutableStateOf<Float?>(null) }
@@ -253,7 +259,7 @@ fun TerminalScreen() {
                     .clickableNoRipple { changeZoom(1f) }.padding(12.dp))
             }
             AnimatedVisibility(
-                visible = headerExpanded,
+                visible = headerExpanded || !terminalEnabled,
                 enter = expandHorizontally(expandFrom = Alignment.End) + fadeIn(),
                 exit = shrinkHorizontally(shrinkTowards = Alignment.End) + fadeOut()
             ) {
@@ -268,32 +274,38 @@ fun TerminalScreen() {
                         }
                     }
                     // The label names the view you will go to: "Terminal" from the UI, "UI" from the terminal.
-                    Text(
-                        stringResource(if (terminalMode) R.string.main_ui else R.string.main_terminal),
-                        color = ACCENT, style = uiStyle, maxLines = 1,
-                        modifier = Modifier
-                            .clickableNoRipple {
-                                val value = !terminalMode
-                                selectedMode = value
-                                TerminalPreferences.saveTerminalMode(ctx, value)
-                            }
-                            .padding(horizontal = 12.dp, vertical = 12.dp)
-                    )
+                    // It is hidden when the terminal is disabled in Settings: there is no other view to go to.
+                    if (terminalEnabled) {
+                        Text(
+                            stringResource(if (terminalMode) R.string.main_ui else R.string.main_terminal),
+                            color = ACCENT, style = uiStyle, maxLines = 1,
+                            modifier = Modifier
+                                .clickableNoRipple {
+                                    val value = !terminalMode
+                                    selectedMode = value
+                                    TerminalPreferences.saveTerminalMode(ctx, value)
+                                }
+                                .padding(horizontal = 12.dp, vertical = 12.dp)
+                        )
+                    }
                     CtrlBtn(Icons.Filled.Settings, description = stringResource(R.string.settings_title)) {
                         ctx.startActivity(Intent(ctx, SettingsActivity::class.java))
                     }
                 }
             }
-            CtrlBtn(
-                Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                description = stringResource(
-                    if (headerExpanded) R.string.header_hide_options else R.string.header_show_options
-                ),
-                rotation = chevronRotation
-            ) {
-                val value = !headerExpanded
-                selectedHeader = value
-                TerminalPreferences.saveHeaderExpanded(ctx, value)
+            // The arrow that expands and collapses the header exists only with the terminal enabled.
+            if (terminalEnabled) {
+                CtrlBtn(
+                    Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                    description = stringResource(
+                        if (headerExpanded) R.string.header_hide_options else R.string.header_show_options
+                    ),
+                    rotation = chevronRotation
+                ) {
+                    val value = !headerExpanded
+                    selectedHeader = value
+                    TerminalPreferences.saveHeaderExpanded(ctx, value)
+                }
             }
         }
 
@@ -382,7 +394,10 @@ fun TerminalScreen() {
     }
 }
 
-/** The video above the terminal text, with a fullscreen button and the time bar that hide after a few seconds. */
+/**
+ * The video above the terminal text, with a fullscreen button and the time bar that hide after a few seconds.
+ * It never takes more than a third of the screen height (see videoBoxModifier).
+ */
 @Composable
 private fun InlineVideo(landscape: Boolean, videoAspect: Float, onFullscreen: () -> Unit) {
     var overlay by remember { mutableStateOf(true) }
@@ -399,10 +414,7 @@ private fun InlineVideo(landscape: Boolean, videoAspect: Float, onFullscreen: ()
         contentAlignment = Alignment.Center
     ) {
         val ratio = videoAspect.coerceIn(1f, 2.4f)
-        VideoSurface(
-            if (landscape) Modifier.height(150.dp).aspectRatio(ratio)
-            else Modifier.fillMaxWidth().aspectRatio(ratio)
-        )
+        VideoSurface(videoBoxModifier(landscape, ratio))
         if (overlay) {
             Box(Modifier.align(Alignment.TopEnd).background(Color(0x66000000))) {
                 CtrlBtn(Icons.Filled.Fullscreen) { onFullscreen() }

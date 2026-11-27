@@ -14,6 +14,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.json.JSONArray
@@ -151,14 +152,21 @@ object TerminalPreferences {
         if (size.isFinite()) writes.trySend(context.applicationContext to size.coerceIn(7f, 20f))
     }
 
-    fun terminalMode(context: Context): Flow<Boolean?> = context.applicationContext.terminalDataStore.data
-        .catch { error ->
-            if (error is IOException) {
-                Log.e("TerminalPreferences", "Cannot read terminal mode", error)
-                emit(emptyPreferences())
-            } else throw error
-        }
-        .map { values -> values[terminalModeKey] ?: true }
+    /**
+     * Whether the terminal view is the one shown. It is never shown while the terminal is disabled in Settings
+     * (see [FeaturePrefs.terminalEnabled]): the app then stays in the interface; the choice made before is kept.
+     */
+    fun terminalMode(context: Context): Flow<Boolean?> = combine(
+        context.applicationContext.terminalDataStore.data
+            .catch { error ->
+                if (error is IOException) {
+                    Log.e("TerminalPreferences", "Cannot read terminal mode", error)
+                    emit(emptyPreferences())
+                } else throw error
+            }
+            .map { values -> values[terminalModeKey] ?: true },
+        FeaturePrefs.terminalEnabled(context)
+    ) { saved, enabled -> saved && enabled }
 
     fun saveTerminalMode(context: Context, enabled: Boolean) {
         modeWrites.trySend(context.applicationContext to enabled)

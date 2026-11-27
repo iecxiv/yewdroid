@@ -31,6 +31,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 /** Longest a play request is considered pending (ms): the first extraction of a video can take a while. */
 private const val PLAY_PENDING_MS = 45_000L
 
+/** Longest the suggestions wait for the tapped track to start before they are dropped (ms). */
+private const val RELATED_WAIT_MS = 90_000L
+
 /** Interface invoked by Python (yt_term.py). */
 interface TermSink {
     fun write(s: String)
@@ -125,6 +128,8 @@ object TerminalHub {
     @Volatile private var pendingLine: String? = null
     /** When the "getting the video" notice was last raised (ms), so an old timeout cannot clear a newer one. */
     @Volatile private var loadingSince = 0L
+    /** Counts the taps that asked for YouTube's suggestions as the queue; an older one gives up when a newer one comes. */
+    @Volatile private var relatedToken = 0
     /** True when Android refused audio focus to a track that never started: it starts when the app is in front. */
     @Volatile private var resumeOnForeground = false
     private var surface: SurfaceView? = null
@@ -430,6 +435,35 @@ object TerminalHub {
         showLoading()
         sendCommand(line)
         return true
+    }
+
+    /**
+     * Plays [line] (a command for the single video [videoId]) and, once that track is sounding, appends the
+     * videos YouTube suggests after it to the queue (see yt_related.py). The suggestions are asked for at
+     * once, in parallel with the lookup of the video, so they do not delay it. Returns false when the tap was
+     * ignored.
+     */
+    fun runPlayWithRelated(line: String, videoId: String): Boolean {
+        if (!runPlay(line)) return false
+        val token = ++relatedToken
+        scope.launch { queueRelated(videoId, token) }
+        return true
+    }
+
+    private suspend fun queueRelated(videoId: String, token: Int) {
+        val module = runCatching { Python.getInstance().getModule("yt_related") }.getOrNull() ?: return
+        val items = runCatching { module.callAttr("related", videoId).toString() }.getOrNull()
+        if (items == null || items == "[]") return
+        var waited = 0L
+        while (waited < RELATED_WAIT_MS && token == relatedToken) {
+            if (!loadingPlay.value && playing.value) {
+                val status = runCatching { module.callAttr("enqueue", videoId, items).toString() }.getOrDefault("error")
+                if (status == "ok") refreshQueue()
+                if (status != "wait") return
+            }
+            delay(500)
+            waited += 500
+        }
     }
 
     /** Sends several commands in order from one coroutine, so they cannot overtake each other. */
