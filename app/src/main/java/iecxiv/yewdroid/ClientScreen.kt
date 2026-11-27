@@ -29,8 +29,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -63,7 +61,6 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
-private val BG = Color(0xFF0C0C0C)
 private val FG = Color(0xFFDCDFE4)
 private val ACCENT = Color(0xFF98C379)
 private val MUTED = Color(0xFF7F848E)
@@ -232,10 +229,10 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     var adding by remember { mutableStateOf<Int?>(null) }
     var clearingHistory by remember { mutableStateOf(false) }
     var order by remember { mutableStateOf<ConfigOption?>(null) }
-    val autoQueueFlow = remember(ctx.applicationContext) { TerminalPreferences.clientAutoQueue(ctx.applicationContext) }
-    val savedAutoQueue by autoQueueFlow.collectAsState(initial = null)
-    var selectedAutoQueue by remember { mutableStateOf<Boolean?>(null) }
-    val autoQueue = selectedAutoQueue ?: savedAutoQueue
+    val queueModeFlow = remember(ctx.applicationContext) { FeaturePrefs.queueMode(ctx.applicationContext) }
+    val savedQueueMode by queueModeFlow.collectAsState(initial = null)
+    var selectedQueueMode by remember { mutableStateOf<QueueMode?>(null) }
+    val queueMode = selectedQueueMode ?: savedQueueMode
     val searchFlow = remember(ctx.applicationContext) { TerminalPreferences.searchHistory(ctx.applicationContext) }
     val searches by searchFlow.collectAsState(initial = emptyList())
     val suggestions = remember(searches, query) {
@@ -397,14 +394,13 @@ fun ClientScreen(modifier: Modifier = Modifier) {
             if (section == Section.PLAYLISTS) {
                 OpenedPlaylistBar(openedPlaylist.orEmpty()) { openedPlaylist = null }
             }
-            if (autoQueue != null) {
-                AutoQueueRow(
-                    autoQueue = autoQueue,
+            if (queueMode != null) {
+                QueueModeRow(
+                    mode = queueMode,
                     showSave = section == Section.SEARCH && state.mode == "normal" && shownItems.isNotEmpty(),
-                    onToggle = {
-                        val value = !autoQueue
-                        selectedAutoQueue = value
-                        TerminalPreferences.saveClientAutoQueue(ctx, value)
+                    onPick = { value ->
+                        selectedQueueMode = value
+                        FeaturePrefs.saveQueueMode(ctx, value)
                     },
                     onSave = { saving = true }
                 )
@@ -472,7 +468,8 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                         ResultRow(
                             item,
                             playlist = state.mode == "ytpl",
-                            queueRest = autoQueue ?: true,
+                            queueRest = queueMode == null || queueMode == QueueMode.PAGE,
+                            related = queueMode == QueueMode.RELATED,
                             marked = loadingPlay && pendingResult == item.n,
                             onAdd = { adding = it },
                             onDownload = { kind -> DownloadHub.loadFormats(item.id, item.title, kind) },
@@ -635,42 +632,6 @@ private fun OpenedPlaylistBar(name: String, onBack: () -> Unit) {
     }
 }
 
-/** The auto-queue switch, with the "save as playlist" button when there are results to save. */
-@Composable
-private fun AutoQueueRow(autoQueue: Boolean, showSave: Boolean, onToggle: () -> Unit, onSave: () -> Unit) {
-    val small = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = MUTED)
-    Row(
-        Modifier.fillMaxWidth()
-            .clickable(onClick = onToggle)
-            .padding(start = 12.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Switch(
-            checked = autoQueue,
-            onCheckedChange = null,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = BG,
-                checkedTrackColor = ACCENT,
-                checkedBorderColor = ACCENT,
-                uncheckedThumbColor = FG,
-                uncheckedTrackColor = Color(0xFF2A2A2A),
-                uncheckedBorderColor = Color(0xFF555555)
-            )
-        )
-        Text(
-            stringResource(R.string.client_autoqueue),
-            style = small.copy(color = FG),
-            modifier = Modifier.padding(start = 10.dp).weight(1f)
-        )
-        if (showSave) {
-            TextButton(
-                onClick = onSave,
-                colors = ButtonDefaults.textButtonColors(contentColor = ACCENT)
-            ) { Text(stringResource(R.string.client_save_playlist), fontSize = 12.sp) }
-        }
-    }
-}
-
 /** Previous and next page buttons with the page counter. */
 @Composable
 private fun PageBar(page: Int, pages: Int) {
@@ -799,14 +760,16 @@ private fun SearchHistoryPanel(
 
 /**
  * One result of the list. [marked] is true for the result tapped while its video loads: the row gets the same
- * green as the playing entry of the queue, and its title turns green. [onRemove], when given, adds a menu
- * entry named [removeLabel] (remove from the opened playlist, or from the history).
+ * green as the playing entry of the queue, and its title turns green. [related] makes a tap play only that video
+ * and queue the videos YouTube suggests after it. [onRemove], when given, adds a menu entry named
+ * [removeLabel] (remove from the opened playlist, or from the history).
  */
 @Composable
 private fun ResultRow(
     item: ClientItem,
     playlist: Boolean,
     queueRest: Boolean,
+    related: Boolean = false,
     marked: Boolean = false,
     onAdd: (Int) -> Unit,
     onDownload: (String) -> Unit,
@@ -821,16 +784,24 @@ private fun ResultRow(
     } else {
         listOf(item.author, item.views, item.date)
     }.filter { it.isNotEmpty() }.joinToString(" \u00b7 ")
+    val play: (String) -> Unit = { line ->
+        if (related) {
+            TerminalHub.runPlayWithRelated(line, item.id)
+        } else {
+            TerminalHub.runPlay(line)
+        }
+    }
     Row(
         Modifier.fillMaxWidth()
             .background(if (marked) Color(0xFF1B241B) else Color.Transparent)
             .clickable {
-                // Playlists open; videos play (and queue the rest of the page when auto-queue is on). Tapping the
-                // same video again while it loads is ignored; tapping another one replaces the pending request.
+                // Playlists open; videos play (and queue the rest of the page or YouTube's suggestions, depending
+                // on the queue mode). Tapping the same video again while it loads is ignored; tapping another one
+                // replaces the pending request.
                 if (playlist) {
                     TerminalHub.runCommand(item.n.toString())
                 } else {
-                    TerminalHub.runPlay(selection(item.n, queueRest))
+                    play(selection(item.n, queueRest))
                 }
             }
             .padding(horizontal = 8.dp, vertical = 6.dp),
@@ -868,7 +839,7 @@ private fun ResultRow(
                             text = { Text(stringResource(label)) },
                             onClick = {
                                 menu = false
-                                TerminalHub.runPlay(command(item.n, queueRest))
+                                play(command(item.n, queueRest))
                             }
                         )
                     }
