@@ -68,6 +68,9 @@ private val FG = Color(0xFFDCDFE4)
 private val ACCENT = Color(0xFF98C379)
 private val MUTED = Color(0xFF7F848E)
 
+/** Background of the result tapped while its video loads (a little stronger than the queue's, to be seen). */
+private val PENDING_BG = Color(0xFF223A24)
+
 /** Virtual screen the yewtube session uses while the native client is shown (sets the page size). */
 private const val CLIENT_COLS = 100
 private const val CLIENT_ROWS = 24
@@ -206,6 +209,8 @@ fun ClientScreen(modifier: Modifier = Modifier) {
     val downloads by DownloadHub.downloads.collectAsState()
     val formats by DownloadHub.formats.collectAsState()
     val loadingPlay by TerminalHub.loadingPlay.collectAsState()
+    // Number of the result tapped while its video loads: that row is marked until the video starts.
+    val pendingResult by TerminalHub.pendingResult.collectAsState()
     val activeDownloads = downloads.items.count { it.active }
     val terminalTouched = remember { ClientMemory.takeTerminalTouch() }
     var query by rememberSaveable { mutableStateOf(ClientMemory.query) }
@@ -447,18 +452,24 @@ fun ClientScreen(modifier: Modifier = Modifier) {
                 val listName = if (section == Section.PLAYLISTS) openedPlaylist else null
                 LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
                     items(shownItems, key = { "${it.n}-${it.id}" }) { item ->
-                        ResultRow(
-                            item,
-                            playlist = state.mode == "ytpl",
-                            queueRest = autoQueue ?: true,
-                            onAdd = { adding = it },
-                            onDownload = { kind -> DownloadHub.loadFormats(item.id, item.title, kind) },
-                            onRemove = if (listName != null) {
-                                { TerminalHub.runCommand("plrm $listName ${item.n}") }
-                            } else {
-                                null
-                            }
-                        )
+                        // The result tapped while its video loads is marked in green until the video starts.
+                        Box(
+                            Modifier.fillMaxWidth()
+                                .background(if (pendingResult == item.n) PENDING_BG else Color.Transparent)
+                        ) {
+                            ResultRow(
+                                item,
+                                playlist = state.mode == "ytpl",
+                                queueRest = autoQueue ?: true,
+                                onAdd = { adding = it },
+                                onDownload = { kind -> DownloadHub.loadFormats(item.id, item.title, kind) },
+                                onRemove = if (listName != null) {
+                                    { TerminalHub.runCommand("plrm $listName ${item.n}") }
+                                } else {
+                                    null
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -797,8 +808,8 @@ private fun ResultRow(
     Row(
         Modifier.fillMaxWidth()
             .clickable {
-                // Playlists open; videos play (and queue the rest of the page when auto-queue is on). Taps are
-                // ignored while a previous play request is still being resolved.
+                // Playlists open; videos play (and queue the rest of the page when auto-queue is on). Tapping
+                // the same result again while it loads is ignored; tapping another replaces the pending one.
                 if (playlist) {
                     TerminalHub.runCommand(item.n.toString())
                 } else {
