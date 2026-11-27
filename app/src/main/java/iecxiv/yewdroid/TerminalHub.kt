@@ -81,6 +81,11 @@ object TerminalHub {
     val repeat = MutableStateFlow(0)
     /** True from tapping a video until it starts (or fails): the client shows it and ignores more taps. */
     val loadingPlay = MutableStateFlow(false)
+    /**
+     * Queue entry the user just chose (next, previous or a tap in the queue) while its video is still being
+     * found, so the queue can mark it at once. Null when nothing is pending; cleared when a track starts.
+     */
+    val pendingIndex = MutableStateFlow<Int?>(null)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val main = Handler(Looper.getMainLooper())
@@ -383,14 +388,32 @@ object TerminalHub {
                     Python.getInstance().getModule("yt_client").callAttr("queue").toString()
                 )
             }
+            // The queue now says which track is playing, so the entry marked while waiting is no longer needed.
+            pendingIndex.value = null
         }
     }
 
-    /** Skips to track [index] of the current playback queue. */
+    /** Skips to track [index] of the current playback queue; the entry is marked at once. */
     fun jumpTo(index: Int) {
+        if (index in _queue.value.items.indices) pendingIndex.value = index
         scope.launch {
             runCatching { Python.getInstance().getModule("yt_client").callAttr("jump", index) }
         }
+    }
+
+    /**
+     * Marks the entry next to the one shown as chosen ([delta] is +1 for next, -1 for previous), repeating
+     * presses move it further. At the end of the list it wraps only when the whole list repeats.
+     */
+    private fun markPending(delta: Int) {
+        val items = _queue.value.items
+        if (items.size < 2) return
+        var target = (pendingIndex.value ?: _queue.value.index) + delta
+        if (target !in items.indices) {
+            if (repeat.value != 1) return
+            target = (target + items.size) % items.size
+        }
+        pendingIndex.value = target
     }
 
     /** Turns shuffle on or off; the queue shown is re-read because its order changes. */
@@ -458,6 +481,7 @@ object TerminalHub {
         positionMs.value = 0L
         durationMs.value = 0L
         _queue.value = QueueState()
+        pendingIndex.value = null
         main.post {
             exo?.stop()
             exo?.clearMediaItems()
@@ -490,6 +514,14 @@ object TerminalHub {
             "toggle" -> main.post { exo?.let { it.playWhenReady = !it.playWhenReady } }
             "seekf" -> main.post { exo?.let { it.seekTo(it.currentPosition + 10_000) } }
             "seekb" -> main.post { exo?.let { it.seekTo((it.currentPosition - 10_000).coerceAtLeast(0)) } }
+            "next" -> {
+                markPending(+1)
+                event(action)
+            }
+            "prev" -> {
+                markPending(-1)
+                event(action)
+            }
             else -> event(action)
         }
     }

@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
@@ -13,6 +14,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
@@ -118,10 +120,18 @@ fun PlayerScreen(onClose: () -> Unit, onFullscreen: () -> Unit, modifier: Modifi
     val videoOn by TerminalHub.videoOn.collectAsState()
     val videoAspect by TerminalHub.videoAspect.collectAsState()
     val queue by TerminalHub.queue.collectAsState()
+    val pendingIndex by TerminalHub.pendingIndex.collectAsState()
     val shuffle by TerminalHub.shuffle.collectAsState()
     val repeat by TerminalHub.repeat.collectAsState()
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val current = queue.items.getOrNull(queue.index)
+    // The entry marked in the queue: the one just chosen while its video loads, else the one playing.
+    val marked = pendingIndex ?: queue.index
+    val listState = rememberLazyListState()
+    // Keeps the marked entry in view, so a change made with next or previous can be seen.
+    LaunchedEffect(marked, queue.items.size) {
+        if (marked in queue.items.indices) listState.animateScrollToItem(marked)
+    }
     // The panel takes every tap: without a handler of its own, a tap on a part of it that does nothing would pass
     // through to the results list underneath and start whatever result is there.
     Column(
@@ -230,12 +240,13 @@ fun PlayerScreen(onClose: () -> Unit, onFullscreen: () -> Unit, modifier: Modifi
             }
         }
         if (queue.items.size > 1) {
-            LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
+            LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
                 itemsIndexed(queue.items) { index, item ->
-                    val playingNow = index == queue.index
+                    val markedNow = index == marked
+                    val loadingNow = pendingIndex == index
                     Row(
                         Modifier.fillMaxWidth()
-                            .background(if (playingNow) Color(0xFF1B241B) else Color.Transparent)
+                            .background(if (markedNow) Color(0xFF1B241B) else Color.Transparent)
                             .clickable { TerminalHub.jumpTo(index) }
                             .padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -250,7 +261,7 @@ fun PlayerScreen(onClose: () -> Unit, onFullscreen: () -> Unit, modifier: Modifi
                                 item.title, maxLines = 2, overflow = TextOverflow.Ellipsis,
                                 style = TextStyle(
                                     fontFamily = FontFamily.Monospace, fontSize = 13.sp,
-                                    color = if (playingNow) ACCENT else FG
+                                    color = if (markedNow) ACCENT else FG
                                 )
                             )
                             val detail = listOf(item.author, if (item.lengthSec > 0) lengthLabel(item.lengthSec) else "")
@@ -261,6 +272,14 @@ fun PlayerScreen(onClose: () -> Unit, onFullscreen: () -> Unit, modifier: Modifi
                                     style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = MUTED)
                                 )
                             }
+                        }
+                        // A track chosen but not started yet: its video is still being found.
+                        if (loadingNow) {
+                            Text(
+                                "\u2026",
+                                style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 16.sp, color = ACCENT),
+                                modifier = Modifier.padding(start = 8.dp)
+                            )
                         }
                     }
                 }
