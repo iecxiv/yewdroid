@@ -93,6 +93,12 @@ object TerminalHub {
      * found, so the queue can mark it at once. Null when nothing is pending; cleared when a track starts.
      */
     val pendingIndex = MutableStateFlow<Int?>(null)
+    /**
+     * Number (the n of the client's items) of the result tapped while its video is still being found, in
+     * Search, Playlists or History, so the list can mark it. Null when nothing is pending; cleared when a track
+     * starts, when playback stops, when the list changes or when the wait times out.
+     */
+    val pendingResult = MutableStateFlow<Int?>(null)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val main = Handler(Looper.getMainLooper())
@@ -200,6 +206,7 @@ object TerminalHub {
                 loadingPlay.value = false
                 tapPending = false
                 pendingLine = null
+                pendingResult.value = null
             }
         }
     }
@@ -394,10 +401,12 @@ object TerminalHub {
 
     /**
      * Sends a yewtube command from the native client without echoing it in the terminal. The results the
-     * client shows may change with it, so the "same result tapped again" memory of [runPlay] is dropped.
+     * client shows may change with it, so the "same result tapped again" memory of [runPlay] and the mark on
+     * the tapped result are dropped.
      */
     fun runCommand(line: String) {
         pendingLine = null
+        pendingResult.value = null
         sendCommand(line)
     }
 
@@ -405,6 +414,7 @@ object TerminalHub {
      * Sends a command that starts playback. Getting the video can take many seconds the first time. Tapping
      * the same result again while it loads is ignored (it would only start the lookup over); tapping another
      * one replaces the pending request: the lookup of the first is cancelled and the new one starts at once.
+     * The result tapped is remembered in [pendingResult] so the list can mark it until its video starts.
      * Returns false when the tap was ignored.
      */
     fun runPlay(line: String): Boolean {
@@ -414,6 +424,8 @@ object TerminalHub {
         playPendingSince = now
         tapPending = true
         pendingLine = line
+        // The command starts with the number of the result ("3", "3-", "3 -w"...).
+        pendingResult.value = line.trim().takeWhile { it.isDigit() }.toIntOrNull()
         showLoading()
         sendCommand(line)
         return true
@@ -423,6 +435,7 @@ object TerminalHub {
     fun runCommands(vararg lines: String) {
         if (py == null) return
         pendingLine = null
+        pendingResult.value = null
         _client.value = _client.value.copy(busy = true)
         scope.launch { for (line in lines) runCatching { py?.callAttr("send", line) } }
     }
@@ -494,6 +507,7 @@ object TerminalHub {
         loadingPlay.value = false
         tapPending = false
         pendingLine = null
+        pendingResult.value = null
         resumeOnForeground = false
         // The same track started again after the "show video" setting changed resumes where it was.
         val start = if (resumeMs > 0L && title == resumeTitle) resumeMs else 0L
@@ -542,6 +556,7 @@ object TerminalHub {
         loadingPlay.value = false
         tapPending = false
         pendingLine = null
+        pendingResult.value = null
         resumeOnForeground = false
         playing.value = false
         nowPlaying.value = ""
