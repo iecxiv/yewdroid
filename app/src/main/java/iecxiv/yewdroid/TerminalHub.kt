@@ -38,7 +38,7 @@ interface TermSink {
     fun video(on: Boolean)
     fun mode(playing: Boolean)
     fun stopPlayback()
-    /** The playback that was running ended because a new play request took over (not a real stop). */
+    /** The track playing was stopped only because a new play request replaces it (that request goes on). */
     fun replaced()
     /** yewtube is waiting for a command (the native client refreshes its results). */
     fun idle()
@@ -510,8 +510,22 @@ object TerminalHub {
         }
     }
 
-    /** Clears what the old playback showed and stops the player. Shared by a real stop and a replacement. */
-    private fun clearPlayback() {
+    /**
+     * The track playing was stopped because a new play request replaces it. The sound stops, but the request
+     * is still being resolved, so the "getting the video" notice and the tap guard stay as they are.
+     */
+    fun onReplaced() {
+        main.post {
+            exo?.stop()
+            exo?.clearMediaItems()
+            updateKeepScreenOn()
+        }
+    }
+
+    fun onStopPlayback() {
+        // Playback ended, or a play request failed before starting: nothing is pending any more.
+        loadingPlay.value = false
+        tapPending = false
         resumeOnForeground = false
         playing.value = false
         nowPlaying.value = ""
@@ -525,21 +539,6 @@ object TerminalHub {
             exo?.clearMediaItems()
             updateKeepScreenOn()
         }
-    }
-
-    fun onStopPlayback() {
-        // Playback ended, or a play request failed before starting: nothing is pending any more.
-        loadingPlay.value = false
-        tapPending = false
-        clearPlayback()
-    }
-
-    /**
-     * The playback that was running ended because a new play request took over. The old track goes away, but
-     * the new request is still pending, so its "getting the video" notice and tap guard stay as they are.
-     */
-    fun onReplaced() {
-        clearPlayback()
     }
 
     private fun event(action: String) {

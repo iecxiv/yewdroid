@@ -660,9 +660,6 @@ def _make_player_class(CmdPlayer):
             self._fresh = False
             # True once a track started sounding since the list last wrapped (stops a repeat loop of failures).
             self._ok = False
-            # True while a new play request is ending the playback that was running: that playback's end
-            # must not look like a stop to the app (it would cancel the new request's notice).
-            self._replacing = False
 
         def _generate_real_playerargs(self):
             return []
@@ -712,12 +709,7 @@ def _make_player_class(CmdPlayer):
             return True
 
         def play(self, *args, **kwargs):
-            self._replacing = True
-            try:
-                ended = self._stop_loop()
-            finally:
-                self._replacing = False
-            if not ended:
+            if not self._stop_loop():
                 return None
             self._orig = None
             self._fresh = True
@@ -745,8 +737,10 @@ def _make_player_class(CmdPlayer):
                     # A request that never got a stream must not keep the preloads waiting.
                     _T["play"] = None
                     try:
-                        if self._replacing:
-                            # A new request took over: the app keeps its "getting the video" notice.
+                        if self._halt:
+                            # Ended only because a new play request replaces it (_stop_loop is waiting for this
+                            # thread): the app must not take it for a stop, or it would drop its notice that the
+                            # new request is being resolved.
                             _sink.replaced()
                         else:
                             _sink.stopPlayback()
