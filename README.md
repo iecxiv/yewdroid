@@ -10,7 +10,7 @@ YewDroid es una adaptación de yewtube, descendiente de mps-youtube, con interfa
 
 Modified version of yewtube, adapted and simplified for native Android use.
 
-Versión de la app (`versionName`): 1.0.1.
+Versión de la app (`versionName`): 1.0.2.
 
 ### Características
 
@@ -122,7 +122,7 @@ YewDroid adapts yewtube, a descendant of mps-youtube, with a native Android inte
 
 Modified version of yewtube, adapted and simplified for native Android use.
 
-App version (`versionName`): 1.0.1.
+App version (`versionName`): 1.0.2.
 
 ### Features
 
