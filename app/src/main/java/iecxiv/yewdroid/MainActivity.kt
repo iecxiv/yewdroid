@@ -120,8 +120,11 @@ fun TerminalScreen() {
     val savedMode by modeFlow.collectAsState(initial = null)
     val headerFlow = remember(ctx.applicationContext) { TerminalPreferences.headerExpanded(ctx.applicationContext) }
     val savedHeader by headerFlow.collectAsState(initial = null)
+    // When the terminal is disabled in Settings the app shows only the interface and hides the Terminal/UI label.
+    val enabledFlow = remember(ctx.applicationContext) { FeaturePrefs.terminalEnabled(ctx.applicationContext) }
+    val terminalEnabled by enabledFlow.collectAsState(initial = true)
     var selectedMode by remember { mutableStateOf<Boolean?>(null) }
-    val terminalMode = selectedMode ?: savedMode
+    val terminalMode = (selectedMode ?: savedMode)?.let { it && terminalEnabled }
     var selectedHeader by remember { mutableStateOf<Boolean?>(null) }
     val headerExpanded = selectedHeader ?: savedHeader
     var selectedZoom by remember { mutableStateOf<Float?>(null) }
@@ -268,17 +271,20 @@ fun TerminalScreen() {
                         }
                     }
                     // The label names the view you will go to: "Terminal" from the UI, "UI" from the terminal.
-                    Text(
-                        stringResource(if (terminalMode) R.string.main_ui else R.string.main_terminal),
-                        color = ACCENT, style = uiStyle, maxLines = 1,
-                        modifier = Modifier
-                            .clickableNoRipple {
-                                val value = !terminalMode
-                                selectedMode = value
-                                TerminalPreferences.saveTerminalMode(ctx, value)
-                            }
-                            .padding(horizontal = 12.dp, vertical = 12.dp)
-                    )
+                    // It is hidden when the terminal is disabled in Settings: there is no other view to go to.
+                    if (terminalEnabled) {
+                        Text(
+                            stringResource(if (terminalMode) R.string.main_ui else R.string.main_terminal),
+                            color = ACCENT, style = uiStyle, maxLines = 1,
+                            modifier = Modifier
+                                .clickableNoRipple {
+                                    val value = !terminalMode
+                                    selectedMode = value
+                                    TerminalPreferences.saveTerminalMode(ctx, value)
+                                }
+                                .padding(horizontal = 12.dp, vertical = 12.dp)
+                        )
+                    }
                     CtrlBtn(Icons.Filled.Settings, description = stringResource(R.string.settings_title)) {
                         ctx.startActivity(Intent(ctx, SettingsActivity::class.java))
                     }
